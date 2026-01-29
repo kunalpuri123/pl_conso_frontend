@@ -421,8 +421,7 @@ export function AdminAnalyticsPage() {
                         {report?.failed ?? "-"}
                       </TableCell>
 
-                      <TableCell>{ai?.accuracy ? `${ai.accuracy}%` : "-"}</TableCell>
-
+                      <TableCell> {report?.accuracy !== undefined ? `${report.accuracy}%` : "-"} </TableCell>
                       <TableCell>
                         {ai?.verdict ? (
                           <span
