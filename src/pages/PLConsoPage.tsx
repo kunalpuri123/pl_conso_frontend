@@ -42,6 +42,7 @@ export function PLConsoPage() {
   const [selectedMasterBucketFile, setSelectedMasterBucketFile] = useState<string>('');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [consoleLogs, setConsoleLogs] = useState<any[]>([]);
+  const [ipFileValidationError, setIpFileValidationError] = useState<string>('');
 
   const BUSINESS_GROUPS = {
   COTY: "COTY",
@@ -300,11 +301,32 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     },
   });
 
+  // Validate crawl file format
+  const validateCrawlFile = (filename: string, projectId: string, siteName: string, scope: string): boolean => {
+    const project = projects?.find((p) => p.id === projectId);
+    const projectName = project?.name || '';
+    
+    // For POC projects, relax the validation
+    if (projectName === 'POC') {
+      return true;
+    }
+    
+    // For non-POC projects, enforce strict format: {site}_{scope}_Template_YYYYMMDD.tsv
+    const pattern = new RegExp(`^${siteName}_${scope}_Template_\\d{8}\\.tsv$`, 'i');
+    return pattern.test(filename);
+  };
+
   const handleRunAutomation = () => {
     if (!selectedProject || !selectedSite || !selectedScope) {
       toast.error('Please select all required fields');
       return;
     }
+    
+    if (!selectedIPFile) {
+      toast.error('Please select crawl input file');
+      return;
+    }
+    
     createRunMutation.mutate();
   };
 
@@ -435,8 +457,14 @@ const handleUpload = async (
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Project</Label>
-            <Select value={selectedProject} onValueChange={setSelectedProject}>
+            <Label>Project <span className="text-destructive">*</span></Label>
+            <Select value={selectedProject} onValueChange={(value) => {
+              setSelectedProject(value);
+              setSelectedSite('');
+              setSelectedScope('');
+              setSelectedCrawlFile('');
+              setIpFileValidationError('');
+            }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select project" />
               </SelectTrigger>
@@ -451,10 +479,15 @@ const handleUpload = async (
           </div>
 
           <div className="space-y-2">
-            <Label>Site</Label>
+            <Label>Market <span className="text-destructive">*</span></Label>
             <Select
               value={selectedSite}
-              onValueChange={setSelectedSite}
+              onValueChange={(value) => {
+                setSelectedSite(value);
+                setSelectedScope('');
+                setSelectedCrawlFile('');
+                setIpFileValidationError('');
+              }}
               disabled={!selectedProject}
             >
               <SelectTrigger>
@@ -471,8 +504,12 @@ const handleUpload = async (
           </div>
 
           <div className="space-y-2">
-            <Label>Scope</Label>
-            <Select value={selectedScope} onValueChange={setSelectedScope}>
+            <Label>Scope <span className="text-destructive">*</span></Label>
+            <Select value={selectedScope} onValueChange={(value) => {
+              setSelectedScope(value);
+              setSelectedCrawlFile('');
+              setIpFileValidationError('');
+            }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select scope" />
               </SelectTrigger>
@@ -486,7 +523,13 @@ const handleUpload = async (
             </Select>
           </div>
           <div className="space-y-2">
-  <Label>Crawl Input File</Label>
+  <Label>
+    Crawl Input File
+    {(() => {
+      const project = projects?.find((p) => p.id === selectedProject);
+      return project?.name !== 'POC' && <span className="text-destructive"> *</span>;
+    })()}
+  </Label>
 
   <Button variant="outline" asChild>
     <label className="cursor-pointer flex gap-2 items-center">
@@ -501,8 +544,29 @@ const handleUpload = async (
     </label>
   </Button>
 
-  <Select value={selectedCrawlFile} onValueChange={setSelectedCrawlFile}>
-    <SelectTrigger>
+  <Select value={selectedCrawlFile} onValueChange={(value) => {
+    setSelectedCrawlFile(value);
+    // Validate on selection for non-POC projects
+    if (selectedProject && selectedSite && selectedScope) {
+      const project = projects?.find((p) => p.id === selectedProject);
+      const site = sites?.find((s) => s.id === selectedSite);
+      const file = crawlFiles?.find((f) => f.id === value);
+      
+      if (project?.name !== 'POC' && file) {
+        const isValid = validateCrawlFile(file.filename, selectedProject, site?.name || '', selectedScope);
+        if (!isValid) {
+          const siteName = site?.name || '';
+          const expectedFormat = `${siteName}_${selectedScope}_Template_YYYYMMDD.tsv`;
+          setIpFileValidationError(`File must follow format: ${expectedFormat}`);
+        } else {
+          setIpFileValidationError('');
+        }
+      } else {
+        setIpFileValidationError('');
+      }
+    }
+  }}>
+    <SelectTrigger className={ipFileValidationError ? 'border-destructive' : ''}>
       <SelectValue placeholder="Select input file" />
     </SelectTrigger>
     <SelectContent>
@@ -513,6 +577,9 @@ const handleUpload = async (
       ))}
     </SelectContent>
   </Select>
+  {ipFileValidationError && (
+    <p className="text-sm text-destructive">{ipFileValidationError}</p>
+  )}
 </div>
 
 <div className="space-y-2">
@@ -549,7 +616,7 @@ const handleUpload = async (
 
           <Button
             onClick={handleRunAutomation}
-            disabled={createRunMutation.isPending || !selectedProject || !selectedSite || !selectedScope}
+            disabled={createRunMutation.isPending || !selectedProject || !selectedSite || !selectedScope || !selectedCrawlFile || !!ipFileValidationError}
             className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
           >
             {createRunMutation.isPending ? (
