@@ -14,12 +14,22 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [fullName, setFullName] = useState('');
+  const [emailError, setEmailError] = useState<string>('');
   
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Final validation for allowed domains
+    const allowed = ['merkle.com', 'dentsu.com'];
+    const domain = email.split('@')[1]?.toLowerCase() || '';
+    if (!allowed.includes(domain)) {
+      setEmailError('Only @merkle.com and @dentsu.com emails are allowed');
+      toast.error('Only @merkle.com and @dentsu.com emails are allowed');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -42,6 +52,21 @@ export function LoginPage() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const validateEmailDomain = (value: string) => {
+    setEmail(value);
+    if (!value.includes('@')) {
+      setEmailError('Invalid email');
+      return;
+    }
+    const allowed = ['merkle.com', 'dentsu.com'];
+    const domain = value.split('@')[1]?.toLowerCase() || '';
+    if (!allowed.includes(domain)) {
+      setEmailError('Only @merkle.com and @dentsu.com emails are allowed');
+    } else {
+      setEmailError('');
     }
   };
 
@@ -82,11 +107,14 @@ export function LoginPage() {
                 id="email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => validateEmailDomain(e.target.value)}
                 placeholder="Enter your email"
                 required
                 className="border-b border-t-0 border-l-0 border-r-0 rounded-none focus:ring-0 px-0"
               />
+              {emailError && (
+                <p className="text-sm text-destructive mt-1">{emailError}</p>
+              )}
             </div>
             
             <div className="space-y-2">
@@ -106,7 +134,7 @@ export function LoginPage() {
             <Button
               type="submit"
               className="w-full bg-accent hover:bg-accent/90 text-accent-foreground font-semibold py-6 mt-6"
-              disabled={isLoading}
+              disabled={isLoading || !!emailError || !email}
             >
               {isLoading ? 'Please wait...' : isSignUp ? 'CREATE ACCOUNT' : 'LOGIN'}
             </Button>

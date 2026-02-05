@@ -40,6 +40,11 @@ export function PLConsoPage() {
   const [uploadingType, setUploadingType] = useState<'CRAWL' | 'MASTER' | null>(null);
   const [selectedIPFile, setSelectedIPFile] = useState<string>('');
   const [selectedMasterBucketFile, setSelectedMasterBucketFile] = useState<string>('');
+  const [projectFilter, setProjectFilter] = useState<string>('');
+  const [siteFilter, setSiteFilter] = useState<string>('');
+  const [crawlFileFilter, setCrawlFileFilter] = useState<string>('');
+  const [crawlInputFilter, setCrawlInputFilter] = useState<string>('');
+  const [masterFileFilter, setMasterFileFilter] = useState<string>('');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [consoleLogs, setConsoleLogs] = useState<any[]>([]);
   const [ipFileValidationError, setIpFileValidationError] = useState<string>('');
@@ -464,16 +469,31 @@ const handleUpload = async (
               setSelectedScope('');
               setSelectedCrawlFile('');
               setIpFileValidationError('');
+              setProjectFilter('');
+              setSiteFilter('');
+              setCrawlFileFilter('');
+              setCrawlInputFilter('');
+              setMasterFileFilter('');
             }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select project" />
               </SelectTrigger>
               <SelectContent>
-                {projects?.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
+                <div className="px-2 py-2">
+                  <input
+                    value={projectFilter}
+                    onChange={(e) => setProjectFilter(e.target.value)}
+                    placeholder="Search projects..."
+                    className="w-full border rounded px-2 py-1"
+                  />
+                </div>
+                {projects
+                  ?.filter((p) => p.name.toLowerCase().includes(projectFilter.toLowerCase()))
+                  .map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -487,6 +507,10 @@ const handleUpload = async (
                 setSelectedScope('');
                 setSelectedCrawlFile('');
                 setIpFileValidationError('');
+                setSiteFilter('');
+                setCrawlFileFilter('');
+                setCrawlInputFilter('');
+                setMasterFileFilter('');
               }}
               disabled={!selectedProject}
             >
@@ -494,11 +518,21 @@ const handleUpload = async (
                 <SelectValue placeholder="Select site" />
               </SelectTrigger>
               <SelectContent>
-                {sites?.map((site) => (
-                  <SelectItem key={site.id} value={site.id}>
-                    {site.name}
-                  </SelectItem>
-                ))}
+                <div className="px-2 py-2">
+                  <input
+                    value={siteFilter}
+                    onChange={(e) => setSiteFilter(e.target.value)}
+                    placeholder="Search sites..."
+                    className="w-full border rounded px-2 py-1"
+                  />
+                </div>
+                {sites
+                  ?.filter((s) => s.name.toLowerCase().includes(siteFilter.toLowerCase()))
+                  .map((site) => (
+                    <SelectItem key={site.id} value={site.id}>
+                      {site.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -509,6 +543,9 @@ const handleUpload = async (
               setSelectedScope(value);
               setSelectedCrawlFile('');
               setIpFileValidationError('');
+              setCrawlFileFilter('');
+              setCrawlInputFilter('');
+              setMasterFileFilter('');
             }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select scope" />
@@ -570,11 +607,21 @@ const handleUpload = async (
       <SelectValue placeholder="Select input file" />
     </SelectTrigger>
     <SelectContent>
-      {crawlFiles?.map((file) => (
-        <SelectItem key={file.id} value={file.id}>
-          {file.filename}
-        </SelectItem>
-      ))}
+      <div className="px-2 py-2">
+        <input
+          value={crawlFileFilter}
+          onChange={(e) => setCrawlFileFilter(e.target.value)}
+          placeholder="Search files..."
+          className="w-full border rounded px-2 py-1"
+        />
+      </div>
+      {crawlFiles
+        ?.filter((f) => f.filename.toLowerCase().includes(crawlFileFilter.toLowerCase()))
+        .map((file) => (
+          <SelectItem key={file.id} value={file.id}>
+            {file.filename}
+          </SelectItem>
+        ))}
     </SelectContent>
   </Select>
   {ipFileValidationError && (
@@ -585,17 +632,27 @@ const handleUpload = async (
 <div className="space-y-2">
   <Label>Crawl Input (IP) File</Label>
   <Select value={selectedIPFile} onValueChange={setSelectedIPFile}>
-    <SelectTrigger>
-      <SelectValue placeholder="Select crawl input file" />
-    </SelectTrigger>
-    <SelectContent>
-      {crawlInputFiles?.map((file) => (
-        <SelectItem key={file.name} value={file.name}>
-          {file.name}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
+      <SelectTrigger>
+        <SelectValue placeholder="Select crawl input file" />
+      </SelectTrigger>
+      <SelectContent>
+        <div className="px-2 py-2">
+          <input
+            value={crawlInputFilter}
+            onChange={(e) => setCrawlInputFilter(e.target.value)}
+            placeholder="Search storage files..."
+            className="w-full border rounded px-2 py-1"
+          />
+        </div>
+        {crawlInputFiles
+          ?.filter((f) => f.name.toLowerCase().includes(crawlInputFilter.toLowerCase()))
+          .map((file) => (
+            <SelectItem key={file.name} value={file.name}>
+              {file.name}
+            </SelectItem>
+          ))}
+      </SelectContent>
+    </Select>
 </div>
 
 <div className="space-y-2">
@@ -605,11 +662,21 @@ const handleUpload = async (
       <SelectValue placeholder="Select master file" />
     </SelectTrigger>
     <SelectContent>
-      {masterBucketFiles?.map((file) => (
-        <SelectItem key={file.name} value={file.name}>
-          {file.name}
-        </SelectItem>
-      ))}
+      <div className="px-2 py-2">
+        <input
+          value={masterFileFilter}
+          onChange={(e) => setMasterFileFilter(e.target.value)}
+          placeholder="Search master files..."
+          className="w-full border rounded px-2 py-1"
+        />
+      </div>
+      {masterBucketFiles
+        ?.filter((f) => f.name.toLowerCase().includes(masterFileFilter.toLowerCase()))
+        .map((file) => (
+          <SelectItem key={file.name} value={file.name}>
+            {file.name}
+          </SelectItem>
+        ))}
     </SelectContent>
   </Select>
 </div>
