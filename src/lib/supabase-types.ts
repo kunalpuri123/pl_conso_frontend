@@ -12,7 +12,25 @@ export interface Profile {
   avatar_url: string | null;
   created_at: string;
   updated_at: string;
+  
 }
+
+interface DownloadItem {
+  run_file_id: string;
+  filename: string;
+  storage_path: string;
+  file_type: string;
+  project_name: string | null;
+  site_name: string | null;
+  user_full_name: string | null;
+  scope: string | null;
+  run_uuid: string;
+  file_created_at: string;
+
+  // ⭐ ADD THIS
+  automation_slug: string | null;
+}
+
 
 export interface UserRole {
   id: string;
@@ -53,6 +71,7 @@ export interface Run {
   project?: Project;
   site?: Site;
   profile?: Profile;
+  automation_slug?: string | null;
 }
 
 export interface RunLog {

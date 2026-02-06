@@ -18,6 +18,7 @@ import monitorGraphic from '@/assets/monitor-graphic.png';
 
 const automations = [
   { id: 'pl-conso', name: 'PL Conso Automation', path: '/automation/pl-conso' },
+  { id: 'pl-input', name: 'PL Input Automation', path: '/automation/pl-input' },
 ];
 
 export function HomePage() {

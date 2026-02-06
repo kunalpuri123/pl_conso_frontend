@@ -31,7 +31,7 @@ import type { Project, Site, Run, InputFile, RunLog } from '@/lib/supabase-types
 
 const scopes = ['PL'];
 
-export function PLConsoPage() {
+export function PLInputPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -47,7 +47,7 @@ export function PLConsoPage() {
   const [masterFileFilter, setMasterFileFilter] = useState<string>('');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [consoleLogs, setConsoleLogs] = useState<any[]>([]);
-  const [ipFileValidationError, setIpFileValidationError] = useState<string>('');
+  
 
   const BUSINESS_GROUPS = {
   COTY: "COTY",
@@ -137,41 +137,50 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
   });
 
   // Fetch input files
-  const { data: crawlFiles } = useQuery({
-    queryKey: ['input-files', 'CRAWL'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('input_files')
-        .select('*')
-        .eq('file_type', 'CRAWL')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data as InputFile[];
-    },
-  });
-
-// Fetch crawl-input (IP) files from bucket
-const { data: crawlInputFiles } = useQuery({
-  queryKey: ['storage', 'crawl-input'],
+const { data: bizFiles } = useQuery({
+  queryKey: ['storage-biz-files'],
   queryFn: async () => {
-    const { data, error } = await supabase.storage.from('crawl-input').list('', {
-      limit: 1000,
-      sortBy: { column: 'created_at', order: 'desc' }
-    });
-    if (error) throw error;
+    const { data, error } = await supabase.storage
+      .from('input-creation-bussiness-file')
+      .list('');
+
+    if (error) {
+      console.error('bizFiles error:', error);
+      throw error;
+    }
+    console.log('bizFiles loaded:', data);
     return data;
   },
 });
 
+
+// Fetch crawl-input (IP) files from bucket
+const { data: crawlInputFiles } = useQuery({
+  queryKey: ['storage-crawl-input-files'],
+  queryFn: async () => {
+    const { data, error } = await supabase.storage
+      .from('input-creation-crawl-team-file')
+      .list('', { limit: 100 });
+
+    if (error) throw error;
+
+    console.log("IP files:", data);
+
+    return data;
+  },
+});
+
+
 // Fetch masters files from bucket
 const { data: masterBucketFiles } = useQuery({
-  queryKey: ['storage', 'masters'],
+  queryKey: ['storage-master-files'],
   queryFn: async () => {
-    const { data, error } = await supabase.storage.from('masters').list('', {
-      limit: 1000,
-      sortBy: { column: 'created_at', order: 'desc' }
-    });
-    if (error) throw error;
+    const { data, error } = await supabase.storage.from('input-creation-master').list('');
+    if (error) {
+      console.error('masterBucketFiles error:', error);
+      throw error;
+    }
+    console.log('masterBucketFiles loaded:', data);
     return data;
   },
 });
@@ -268,7 +277,8 @@ const { data: masterBucketFiles } = useQuery({
     mutationFn: async () => {
       const project = projects?.find((p) => p.id === selectedProject);
       const site = sites?.find((s) => s.id === selectedSite);
-      const crawlFile = crawlFiles?.find((f) => f.id === selectedCrawlFile);
+      const crawlFile = bizFiles?.find((f) => f.name === selectedCrawlFile);
+
 
 if (!crawlFile) throw new Error("Please select crawl output file");
 if (!selectedIPFile) throw new Error("Please select crawl input file");
@@ -281,12 +291,12 @@ if (!selectedMasterBucketFile) throw new Error("Please select master file");
           project_id: selectedProject,
           site_id: selectedSite,
           scope: selectedScope,
-          op_filename: crawlFile.storage_path,     // uploaded OP
+          op_filename: selectedCrawlFile,    // uploaded OP
 ip_filename: selectedIPFile,          // from crawl-input bucket
 master_filename: selectedMasterBucketFile, // from masters bucket
+automation_slug: 'pl-input',
 
           status: 'pending',
-          automation_slug: 'pl-conso',
         })
         .select()
         .single();
@@ -298,7 +308,9 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     setCurrentRunId(data.id);
     toast.success(`Run ${data.run_uuid} started`);
 
-    await fetch("https://pl-conso-backend.onrender.com/run/" + data.id, { method: "POST" });
+    await fetch("https://pl-conso-backend.onrender.com/input-run/" + data.id, {
+    method: "POST",
+    });
 
   refetchRuns();
 },
@@ -308,19 +320,7 @@ master_filename: selectedMasterBucketFile, // from masters bucket
   });
 
   // Validate crawl file format
-  const validateCrawlFile = (filename: string, projectId: string, siteName: string, scope: string): boolean => {
-    const project = projects?.find((p) => p.id === projectId);
-    const projectName = project?.name || '';
-    
-    // For POC projects, relax the validation
-    if (projectName === 'POC') {
-      return true;
-    }
-    
-    // For non-POC projects, enforce strict format: {site}_{scope}_Template_YYYYMMDD.tsv
-    const pattern = new RegExp(`^${siteName}_${scope}_Template_\\d{8}\\.tsv$`, 'i');
-    return pattern.test(filename);
-  };
+ 
 
   const handleRunAutomation = () => {
     if (!selectedProject || !selectedSite || !selectedScope) {
@@ -373,85 +373,37 @@ master_filename: selectedMasterBucketFile, // from masters bucket
 
 const handleUpload = async (
   e: React.ChangeEvent<HTMLInputElement>,
-  type: 'CRAWL' | 'MASTER'
+  type: "BIZ" | "CRAWL" | "MASTER"
 ) => {
   try {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploadingType(type);
+    let bucket = "";
 
-    const originalName = file.name;
-    const extIndex = originalName.lastIndexOf(".");
-    const baseName =
-      extIndex !== -1 ? originalName.slice(0, extIndex) : originalName;
-    const extension =
-      extIndex !== -1 ? originalName.slice(extIndex) : "";
+    if (type === "BIZ") bucket = "input-creation-bussiness-file";
+    if (type === "CRAWL") bucket = "input-creation-crawl-team-file";
+    if (type === "MASTER") bucket = "input-creation-master";
 
-    // 1️⃣ Fetch existing files with same base name
-    const { data: existingFiles, error: fetchError } = await supabase
-      .from("input_files")
-      .select("filename")
-      .ilike("filename", `${baseName}%${extension}`);
+    const filePath = `${Date.now()}_${file.name}`;
 
-    if (fetchError) throw fetchError;
-
-    // 2️⃣ Find next available suffix
-    let newFileName = originalName;
-
-    if (existingFiles && existingFiles.length > 0) {
-      let maxIndex = 0;
-
-      existingFiles.forEach((f) => {
-        const match = f.filename.match(
-          new RegExp(`^${baseName}-(\\d+)\\${extension}$`)
-        );
-        if (match && match[1]) {
-          const num = parseInt(match[1], 10);
-          if (num > maxIndex) maxIndex = num;
-        }
-      });
-
-      // If exact same filename already exists → start suffixing
-      const exactExists = existingFiles.some(
-        (f) => f.filename === originalName
-      );
-
-      if (exactExists) {
-        newFileName = `${baseName}-${maxIndex + 1}${extension}`;
-      }
-    }
-
-    // 3️⃣ Upload to storage
-    const filePath = `${type}/${Date.now()}_${newFileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("input-files")
+    const { error } = await supabase.storage
+      .from(bucket)
       .upload(filePath, file);
 
-    if (uploadError) throw uploadError;
+    if (error) throw error;
 
-    // 4️⃣ Insert DB record
-    const { error: dbError } = await supabase.from("input_files").insert({
-      filename: newFileName,
-      file_type: type,
-      storage_path: filePath,
-      uploaded_by: user?.id,
-    });
+    toast.success("Uploaded successfully");
+    queryClient.invalidateQueries({
+  queryKey: ['storage-crawl-input-files'],
+});
 
-    if (dbError) throw dbError;
-
-    toast.success(`${type} file uploaded as ${newFileName}`);
-
-    queryClient.invalidateQueries({ queryKey: ['input-files', type] });
 
   } catch (err: any) {
-    toast.error(err.message || "Upload failed");
-  } finally {
-    setUploadingType(null);
-    e.target.value = "";
+    toast.error(err.message);
   }
 };
+
 
 
   return (
@@ -469,7 +421,7 @@ const handleUpload = async (
               setSelectedSite('');
               setSelectedScope('');
               setSelectedCrawlFile('');
-              setIpFileValidationError('');
+              
               setProjectFilter('');
               setSiteFilter('');
               setCrawlFileFilter('');
@@ -507,7 +459,7 @@ const handleUpload = async (
                 setSelectedSite(value);
                 setSelectedScope('');
                 setSelectedCrawlFile('');
-                setIpFileValidationError('');
+                
                 setSiteFilter('');
                 setCrawlFileFilter('');
                 setCrawlInputFilter('');
@@ -543,7 +495,7 @@ const handleUpload = async (
             <Select value={selectedScope} onValueChange={(value) => {
               setSelectedScope(value);
               setSelectedCrawlFile('');
-              setIpFileValidationError('');
+              
               setCrawlFileFilter('');
               setCrawlInputFilter('');
               setMasterFileFilter('');
@@ -577,34 +529,13 @@ const handleUpload = async (
         type="file"
         hidden
         accept=".csv,.tsv,.xlsx"
-        onChange={(e) => handleUpload(e, 'CRAWL')}
+        onChange={(e) => handleUpload(e, 'BIZ')}
       />
     </label>
   </Button>
 
-  <Select value={selectedCrawlFile} onValueChange={(value) => {
-    setSelectedCrawlFile(value);
-    // Validate on selection for non-POC projects
-    if (selectedProject && selectedSite && selectedScope) {
-      const project = projects?.find((p) => p.id === selectedProject);
-      const site = sites?.find((s) => s.id === selectedSite);
-      const file = crawlFiles?.find((f) => f.id === value);
-      
-      if (project?.name !== 'POC' && file) {
-        const isValid = validateCrawlFile(file.filename, selectedProject, site?.name || '', selectedScope);
-        if (!isValid) {
-          const siteName = site?.name || '';
-          const expectedFormat = `${siteName}_${selectedScope}_Template_YYYYMMDD.tsv`;
-          setIpFileValidationError(`File must follow format: ${expectedFormat}`);
-        } else {
-          setIpFileValidationError('');
-        }
-      } else {
-        setIpFileValidationError('');
-      }
-    }
-  }}>
-    <SelectTrigger className={ipFileValidationError ? 'border-destructive' : ''}>
+  <Select value={selectedCrawlFile} onValueChange={setSelectedCrawlFile}>
+    <SelectTrigger>
       <SelectValue placeholder="Select input file" />
     </SelectTrigger>
     <SelectContent>
@@ -616,18 +547,18 @@ const handleUpload = async (
           className="w-full border rounded px-2 py-1"
         />
       </div>
-      {crawlFiles
-        ?.filter((f) => f.filename.toLowerCase().includes(crawlFileFilter.toLowerCase()))
-        .map((file) => (
-          <SelectItem key={file.id} value={file.id}>
-            {file.filename}
-          </SelectItem>
-        ))}
+     {bizFiles
+  ?.filter((f) => f.name.toLowerCase().includes(crawlFileFilter.toLowerCase()))
+  .map((file) => (
+    <SelectItem key={file.name} value={file.name}>
+      {file.name}
+    </SelectItem>
+))}
+
+    
     </SelectContent>
   </Select>
-  {ipFileValidationError && (
-    <p className="text-sm text-destructive">{ipFileValidationError}</p>
-  )}
+
 </div>
 
 <div className="space-y-2">
@@ -684,7 +615,7 @@ const handleUpload = async (
 
           <Button
             onClick={handleRunAutomation}
-            disabled={createRunMutation.isPending || !selectedProject || !selectedSite || !selectedScope || !selectedCrawlFile || !!ipFileValidationError}
+            disabled={createRunMutation.isPending || !selectedProject || !selectedSite || !selectedScope || !selectedCrawlFile }
             className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
           >
             {createRunMutation.isPending ? (
@@ -811,42 +742,50 @@ const handleUpload = async (
 
     {/* ⬇ Download */}
     <Button
-      variant="ghost"
-      size="icon"
-      onClick={async () => {
-        const { data, error } = await supabase
-          .from("run_files")
-          .select("*")
-          .eq("run_id", run.id)
-          .eq("file_type", "FINAL_OUTPUT")
-          .single();
+  variant="ghost"
+  size="icon"
+  onClick={async () => {
+    const { data } = await supabase
+      .from("run_files")
+      .select("*")
+      .eq("run_id", run.id);
 
-        if (error || !data) {
-          alert("Output not found");
-          return;
-        }
+    if (!data) return;
 
-        const { data: file } = await supabase.storage
-          .from("run-outputs")
-          .download(data.storage_path);
+    const zipFile = data.find(f => f.file_type === "TSV_ZIP");
 
-        const url = URL.createObjectURL(file);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = data.filename;
-        a.click();
-        URL.revokeObjectURL(url);
-      }}
-    >
-      <Download className="h-4 w-4" />
-    </Button>
+if (!zipFile) {
+  toast.error("ZIP not found");
+  return;
+}
+
+const { data: file, error } = await supabase.storage
+  .from("input-creation-output")   // your new bucket
+  .download(zipFile.storage_path);
+
+if (error || !file) {
+  toast.error("Download failed");
+  return;
+}
+
+const url = URL.createObjectURL(file);
+const a = document.createElement("a");
+a.href = url;
+a.download = zipFile.filename;
+a.click();
+URL.revokeObjectURL(url);
+
+  }}
+>
+  <Download className="h-4 w-4" />
+</Button>
 
     {/* 🔁 Re-run */}
     <Button
       variant="ghost"
       size="icon"
       onClick={async () => {
-        await fetch(`https://pl-conso-backend.onrender.com/run/${run.id}/rerun`, {
+        await fetch(`https://pl-conso-backend.onrender.com/input-run/${run.id}/rerun`, {
   method: "POST",
 });
 
@@ -926,4 +865,4 @@ const handleUpload = async (
   );
 }
 
-export default PLConsoPage;
+export default PLInputPage;

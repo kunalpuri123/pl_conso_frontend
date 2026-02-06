@@ -33,7 +33,6 @@ export function AdminAnalyticsPage() {
   const [dateRange, setDateRange] = useState("7");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [userFilter, setUserFilter] = useState<string>("all");
-  const [automationFilter, setAutomationFilter] = useState<string>("all");
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(
     subDays(new Date(), 7)
   );
@@ -66,12 +65,12 @@ export function AdminAnalyticsPage() {
   });
 
   // ------------------- LOAD RUNS -------------------
-const {
-  data: runs,
-  refetch,
-  isLoading,
-} = useQuery<any[]>({
-    queryKey: ["admin-analytics", dateRange, projectFilter, userFilter,   automationFilter, useCustomDate, customStartDate, customEndDate],
+  const {
+    data: runs,
+    refetch,
+    isLoading,
+  } = useQuery({
+    queryKey: ["admin-analytics", dateRange, projectFilter, userFilter, useCustomDate, customStartDate, customEndDate],
     queryFn: async () => {
       let startDate: Date;
       let endDate: Date;
@@ -103,11 +102,6 @@ const {
       if (userFilter !== "all") {
         query = query.eq("user_id", userFilter);
       }
-
-      if (automationFilter !== "all") {
-  query = query.eq("automation_slug", automationFilter);
-}
-
 
       const { data, error } = await query;
       if (error) throw error;
@@ -263,24 +257,6 @@ const {
               </p>
             </div>
             <div className="flex gap-2 flex-wrap justify-end">
-              {/* AUTOMATION FILTER */}
-<Select
-  value={automationFilter}
-  onValueChange={(value) => {
-    setAutomationFilter(value);
-    setCurrentPage(1);
-  }}
->
-  <SelectTrigger className="w-[150px]">
-    <SelectValue placeholder="All Automation" />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value="all">All Automation</SelectItem>
-    <SelectItem value="pl-input">PL Input</SelectItem>
-    <SelectItem value="pl-conso">PL Conso</SelectItem>
-  </SelectContent>
-</Select>
-
               {/* DATE RANGE PRESET */}
               <Select
                 value={useCustomDate ? "custom" : dateRange}
@@ -394,12 +370,10 @@ const {
           </div>
         </CardHeader>
         <CardContent>
-          
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>User</TableHead>
-                <TableHead>Automation</TableHead>
                 <TableHead>Project</TableHead>
                 <TableHead>Site</TableHead>
                 <TableHead>Status</TableHead>
@@ -435,25 +409,6 @@ const {
                   return (
                     <TableRow key={run.id}>
                       <TableCell>{run.profile?.full_name || "-"}</TableCell>
-                      <TableCell>
-  {(() => {
-    const map: Record<string, { label: string; className: string }> = {
-      "pl-input": { label: "PL Input", className: "bg-blue-500 text-white" },
-      "pl-conso": { label: "PL Conso", className: "bg-purple-500 text-white" }
-    };
-
-    const config = map[run.automation_slug ?? ""];
-
-    return config ? (
-      <Badge className={config.className}>{config.label}</Badge>
-    ) : (
-      <Badge variant="secondary">
-        {run.automation_slug ?? "Unknown"}
-      </Badge>
-    );
-  })()}
-</TableCell>
-
                       <TableCell>{run.projects?.name || "-"}</TableCell>
                       <TableCell>{run.sites?.name || "-"}</TableCell>
                       <TableCell>{getStatusBadge(run.status)}</TableCell>
@@ -502,17 +457,14 @@ const {
                       </TableCell>
 
                       <TableCell>
-  {run.automation_slug === "pl-input" ? (
-    <span>-</span>
-  ) : ai ? (
-    <Button size="sm" onClick={() => downloadAIReport(run.id)}>
-      📄 Report
-    </Button>
-  ) : (
-    <span className="text-gray-400 text-sm">Processing...</span>
-  )}
-</TableCell>
-
+                        {ai ? (
+                          <Button size="sm" onClick={() => downloadAIReport(run.id)}>
+                            📄 Report
+                          </Button>
+                        ) : (
+                          <span className="text-gray-400 text-sm">Processing...</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   );
                 })

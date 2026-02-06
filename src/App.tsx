@@ -18,6 +18,7 @@ import AdminFeedbackPage from "@/pages/admin/AdminFeedbackPage";
 import NotFound from "./pages/NotFound";
 import ProfilePage from "./pages/ProfilePage";
 import FeedbackPage from "./pages/FeedbackPage";
+import PLInputPage from "./pages/PLInputPage";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,8 @@ const App = () => (
             >
               <Route index element={<HomePage />} />
               <Route path="automation/pl-conso" element={<PLConsoPage />} />
+              <Route path="automation/pl-input" element={<PLInputPage />} />
+              <Route path="analytics" element={<AdminAnalyticsPage />} />
               <Route path="downloads" element={<DownloadsPage />} />
 
               {/* Admin routes */}
