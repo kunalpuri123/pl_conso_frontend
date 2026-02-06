@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
@@ -338,6 +339,8 @@ automation_slug: 'pl-input',
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'cancelled':
+  return <Badge variant="outline">⛔ Cancelled</Badge>;
       case 'completed':
         return <Badge className="bg-success text-success-foreground">✓ Complete</Badge>;
       case 'running':
@@ -794,6 +797,36 @@ URL.revokeObjectURL(url);
     >
       <RotateCcw className="h-4 w-4" />
     </Button>
+    {/* 🗑 Delete */}
+{run.status !== "completed" && (
+ <Button
+  variant="ghost"
+  size="icon"
+  onClick={async () => {
+    if (!confirm("Cancel this run?")) return;
+
+    await fetch(
+      `https://pl-conso-backend.onrender.com/runs/${run.id}/cancel`,
+      { method: "POST" }
+    );
+
+    toast.success("Run cancelled");
+
+    // 🔥 THIS IS THE FIX
+    queryClient.invalidateQueries({ queryKey: ['runs'] });
+    queryClient.invalidateQueries({ queryKey: ['run', run.id] });
+
+    if (currentRunId === run.id) {
+      setCurrentRunId(null);
+    }
+  }}
+>
+  <Trash2 className="h-4 w-4 text-red-600" />
+</Button>
+
+
+)}
+
   </div>
 </TableCell>
 
