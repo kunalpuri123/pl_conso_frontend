@@ -2,7 +2,7 @@
 
 export type AppRole = 'admin' | 'user';
 
-export type RunStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface Profile {
   id: string;

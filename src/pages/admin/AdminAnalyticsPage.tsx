@@ -183,6 +183,8 @@ const {
   // ------------------- STATUS BADGE -------------------
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case "cancelled":
+        return <Badge variant="outline">Cancelled</Badge>;
       case "completed":
         return <Badge className="bg-green-600 text-white">Complete</Badge>;
       case "running":
@@ -431,6 +433,7 @@ const {
                 paginatedRuns.map((run: any) => {
                   const ai = run.run_ai_reports?.[0];
                   const report = ai?.report_json;
+                  const isCancelled = run.status === "cancelled";
 
                   return (
                     <TableRow key={run.id}>
@@ -468,7 +471,9 @@ const {
 
                       <TableCell> {report?.accuracy !== undefined ? `${report.accuracy}%` : "-"} </TableCell>
                       <TableCell>
-                        {ai?.verdict ? (
+                        {isCancelled ? (
+                          <span>-</span>
+                        ) : ai?.verdict ? (
                           <span
                             className={
                               ai.verdict === "PASS"
@@ -502,7 +507,7 @@ const {
                       </TableCell>
 
                       <TableCell>
-  {run.automation_slug === "pl-input" ? (
+  {run.automation_slug === "pl-input" || isCancelled ? (
     <span>-</span>
   ) : ai ? (
     <Button size="sm" onClick={() => downloadAIReport(run.id)}>

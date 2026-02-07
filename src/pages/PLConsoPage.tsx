@@ -24,7 +24,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Play, RefreshCw, Download, RotateCcw, Loader2,Upload } from 'lucide-react';
+import { Play, RefreshCw, Download, RotateCcw, Loader2, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Project, Site, Run, InputFile, RunLog } from '@/lib/supabase-types';
@@ -338,6 +338,8 @@ master_filename: selectedMasterBucketFile, // from masters bucket
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'cancelled':
+        return <Badge variant="outline">⛔ Cancelled</Badge>;
       case 'completed':
         return <Badge className="bg-success text-success-foreground">✓ Complete</Badge>;
       case 'running':
@@ -749,23 +751,24 @@ const handleUpload = async (
 
             <TabsContent value="my-runs" className="mt-0">
               <ScrollArea className="h-[200px]">
-                <Table>
+                <div className="w-full overflow-x-auto">
+                  <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Run ID</TableHead>
                       <TableHead>Automation</TableHead>
-                      <TableHead>Project</TableHead>
-                      <TableHead>Site</TableHead>
+                      <TableHead className="hidden md:table-cell">Project</TableHead>
+                      <TableHead className="hidden md:table-cell">Site</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Started</TableHead>
-                      <TableHead>Duration</TableHead>
+                      <TableHead className="hidden lg:table-cell">Started</TableHead>
+                      <TableHead className="hidden lg:table-cell">Duration</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {myRuns?.map((run) => (
                       <TableRow key={run.id}>
-                        <TableCell className="font-mono">{run.run_uuid}</TableCell>
+                        <TableCell className="font-mono break-all sm:whitespace-nowrap">{run.run_uuid}</TableCell>
                         <TableCell>
   {(() => {
     const map: Record<string, { label: string; className: string }> = {
@@ -789,17 +792,17 @@ const handleUpload = async (
   })()}
 </TableCell>
 
-                        <TableCell>{run.projects?.name}</TableCell>
-                        <TableCell>{run.sites?.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{run.projects?.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{run.sites?.name}</TableCell>
                         <TableCell>{getStatusBadge(run.status)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {run.start_time
                             ? formatDistanceToNow(new Date(run.start_time), { addSuffix: true })
                             : '-'}
                         </TableCell>
-                        <TableCell>{formatDuration(run.start_time, run.end_time)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatDuration(run.start_time, run.end_time)}</TableCell>
                         <TableCell>
-  <div className="flex gap-1">
+  <div className="flex flex-wrap gap-1">
     {/* ▶ View logs */}
     <Button
       variant="ghost"
@@ -845,7 +848,9 @@ const handleUpload = async (
     <Button
       variant="ghost"
       size="icon"
+      disabled={run.status === "cancelled"}
       onClick={async () => {
+        if (run.status === "cancelled") return;
         await fetch(`https://pl-conso-backend.onrender.com/run/${run.id}/rerun`, {
   method: "POST",
 });
@@ -855,6 +860,75 @@ const handleUpload = async (
     >
       <RotateCcw className="h-4 w-4" />
     </Button>
+
+    {/* 🗑 Delete */}
+    {run.status !== "completed" && (
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={async () => {
+          if (!confirm("Cancel this run?")) return;
+
+          const { error: cancelError } = await supabase
+            .from("runs")
+            .update({
+              status: "cancelled",
+              start_time: null,
+              end_time: null,
+              progress_percent: 0,
+            })
+            .eq("id", run.id);
+
+          if (cancelError) {
+            toast.error(cancelError.message || "Failed to cancel run");
+            return;
+          }
+
+          await fetch(`https://pl-conso-backend.onrender.com/runs/${run.id}/cancel`, {
+            method: "POST",
+          });
+
+          toast.success("Run cancelled");
+
+          queryClient.setQueryData(['run', run.id], (prev: Run | null | undefined) =>
+            prev
+              ? {
+                  ...prev,
+                  status: 'cancelled',
+                  start_time: null,
+                  end_time: null,
+                  progress_percent: 0,
+                }
+              : prev
+          );
+
+          queryClient.setQueryData(['runs', 'my', user?.id], (prev: (Run & { projects: Project; sites: Site })[] | undefined) =>
+            prev?.map((r) =>
+              r.id === run.id
+                ? { ...r, status: 'cancelled', start_time: null, end_time: null, progress_percent: 0 }
+                : r
+            )
+          );
+
+          queryClient.setQueryData(['runs', 'team'], (prev: any[] | undefined) =>
+            prev?.map((r) =>
+              r.id === run.id
+                ? { ...r, status: 'cancelled', start_time: null, end_time: null, progress_percent: 0 }
+                : r
+            )
+          );
+
+          queryClient.invalidateQueries({ queryKey: ['runs'] });
+          queryClient.invalidateQueries({ queryKey: ['run', run.id] });
+
+          if (currentRunId === run.id) {
+            setCurrentRunId(null);
+          }
+        }}
+      >
+        <Trash2 className="h-4 w-4 text-red-600" />
+      </Button>
+    )}
   </div>
 </TableCell>
 
@@ -862,26 +936,28 @@ const handleUpload = async (
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </ScrollArea>
             </TabsContent>
 
             <TabsContent value="team-runs" className="mt-0">
               <ScrollArea className="h-[200px]">
-                <Table>
+                <div className="w-full overflow-x-auto">
+                  <Table className="min-w-[640px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Run ID</TableHead>
                       <TableHead>Automation</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Project</TableHead>
+                      <TableHead className="hidden md:table-cell">User</TableHead>
+                      <TableHead className="hidden lg:table-cell">Project</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Started</TableHead>
+                      <TableHead className="hidden lg:table-cell">Started</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {teamRuns?.map((run) => (
                       <TableRow key={run.id}>
-                        <TableCell className="font-mono">{run.run_uuid}</TableCell>
+                        <TableCell className="font-mono break-all sm:whitespace-nowrap">{run.run_uuid}</TableCell>
                         <TableCell>
   {(() => {
     const map: Record<string, { label: string; className: string }> = {
@@ -905,10 +981,10 @@ const handleUpload = async (
   })()}
 </TableCell>
 
-                        <TableCell>{run.profile?.full_name || 'Unknown'}</TableCell>
-                        <TableCell>{run.projects?.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{run.profile?.full_name || 'Unknown'}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{run.projects?.name}</TableCell>
                         <TableCell>{getStatusBadge(run.status)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {run.start_time
                             ? formatDistanceToNow(new Date(run.start_time), { addSuffix: true })
                             : '-'}
@@ -917,6 +993,7 @@ const handleUpload = async (
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </ScrollArea>
             </TabsContent>
           </Tabs>

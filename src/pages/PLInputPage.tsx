@@ -683,23 +683,24 @@ const handleUpload = async (
 
             <TabsContent value="my-runs" className="mt-0">
               <ScrollArea className="h-[200px]">
-                <Table>
+                <div className="w-full overflow-x-auto">
+                  <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Run ID</TableHead>
                       <TableHead>Automation</TableHead>
-                      <TableHead>Project</TableHead>
-                      <TableHead>Site</TableHead>
+                      <TableHead className="hidden md:table-cell">Project</TableHead>
+                      <TableHead className="hidden md:table-cell">Site</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Started</TableHead>
-                      <TableHead>Duration</TableHead>
+                      <TableHead className="hidden lg:table-cell">Started</TableHead>
+                      <TableHead className="hidden lg:table-cell">Duration</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {myRuns?.map((run) => (
                       <TableRow key={run.id}>
-                        <TableCell className="font-mono">{run.run_uuid}</TableCell>
+                        <TableCell className="font-mono break-all sm:whitespace-nowrap">{run.run_uuid}</TableCell>
                         <TableCell>
   {(() => {
     const map: Record<string, { label: string; className: string }> = {
@@ -723,17 +724,17 @@ const handleUpload = async (
   })()}
 </TableCell>
 
-                        <TableCell>{run.projects?.name}</TableCell>
-                        <TableCell>{run.sites?.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{run.projects?.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{run.sites?.name}</TableCell>
                         <TableCell>{getStatusBadge(run.status)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {run.start_time
                             ? formatDistanceToNow(new Date(run.start_time), { addSuffix: true })
                             : '-'}
                         </TableCell>
-                        <TableCell>{formatDuration(run.start_time, run.end_time)}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{formatDuration(run.start_time, run.end_time)}</TableCell>
                         <TableCell>
-  <div className="flex gap-1">
+  <div className="flex flex-wrap gap-1">
     {/* ▶ View logs */}
     <Button
       variant="ghost"
@@ -787,10 +788,12 @@ URL.revokeObjectURL(url);
     <Button
       variant="ghost"
       size="icon"
+      disabled={run.status === "cancelled"}
       onClick={async () => {
+        if (run.status === "cancelled") return;
         await fetch(`https://pl-conso-backend.onrender.com/input-run/${run.id}/rerun`, {
-  method: "POST",
-});
+          method: "POST",
+        });
 
         refetchRuns();
       }}
@@ -805,14 +808,55 @@ URL.revokeObjectURL(url);
   onClick={async () => {
     if (!confirm("Cancel this run?")) return;
 
-    await fetch(
-      `https://pl-conso-backend.onrender.com/runs/${run.id}/cancel`,
-      { method: "POST" }
-    );
+    const { error: cancelError } = await supabase
+      .from("runs")
+      .update({
+        status: "cancelled",
+        start_time: null,
+        end_time: null,
+        progress_percent: 0,
+      })
+      .eq("id", run.id);
+
+    if (cancelError) {
+      toast.error(cancelError.message || "Failed to cancel run");
+      return;
+    }
+
+    await fetch(`https://pl-conso-backend.onrender.com/runs/${run.id}/cancel`, {
+      method: "POST",
+    });
 
     toast.success("Run cancelled");
 
-    // 🔥 THIS IS THE FIX
+    queryClient.setQueryData(['run', run.id], (prev: Run | null | undefined) =>
+      prev
+        ? {
+            ...prev,
+            status: 'cancelled',
+            start_time: null,
+            end_time: null,
+            progress_percent: 0,
+          }
+        : prev
+    );
+
+    queryClient.setQueryData(['runs', 'my', user?.id], (prev: (Run & { projects: Project; sites: Site })[] | undefined) =>
+      prev?.map((r) =>
+        r.id === run.id
+          ? { ...r, status: 'cancelled', start_time: null, end_time: null, progress_percent: 0 }
+          : r
+      )
+    );
+
+    queryClient.setQueryData(['runs', 'team'], (prev: any[] | undefined) =>
+      prev?.map((r) =>
+        r.id === run.id
+          ? { ...r, status: 'cancelled', start_time: null, end_time: null, progress_percent: 0 }
+          : r
+      )
+    );
+
     queryClient.invalidateQueries({ queryKey: ['runs'] });
     queryClient.invalidateQueries({ queryKey: ['run', run.id] });
 
@@ -834,26 +878,28 @@ URL.revokeObjectURL(url);
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </ScrollArea>
             </TabsContent>
 
             <TabsContent value="team-runs" className="mt-0">
               <ScrollArea className="h-[200px]">
-                <Table>
+                <div className="w-full overflow-x-auto">
+                  <Table className="min-w-[640px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Run ID</TableHead>
                       <TableHead>Automation</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Project</TableHead>
+                      <TableHead className="hidden md:table-cell">User</TableHead>
+                      <TableHead className="hidden lg:table-cell">Project</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Started</TableHead>
+                      <TableHead className="hidden lg:table-cell">Started</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {teamRuns?.map((run) => (
                       <TableRow key={run.id}>
-                        <TableCell className="font-mono">{run.run_uuid}</TableCell>
+                        <TableCell className="font-mono break-all sm:whitespace-nowrap">{run.run_uuid}</TableCell>
                         <TableCell>
   {(() => {
     const map: Record<string, { label: string; className: string }> = {
@@ -877,10 +923,10 @@ URL.revokeObjectURL(url);
   })()}
 </TableCell>
 
-                        <TableCell>{run.profile?.full_name || 'Unknown'}</TableCell>
-                        <TableCell>{run.projects?.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{run.profile?.full_name || 'Unknown'}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{run.projects?.name}</TableCell>
                         <TableCell>{getStatusBadge(run.status)}</TableCell>
-                        <TableCell>
+                        <TableCell className="hidden lg:table-cell">
                           {run.start_time
                             ? formatDistanceToNow(new Date(run.start_time), { addSuffix: true })
                             : '-'}
@@ -889,6 +935,7 @@ URL.revokeObjectURL(url);
                     ))}
                   </TableBody>
                 </Table>
+                </div>
               </ScrollArea>
             </TabsContent>
           </Tabs>
