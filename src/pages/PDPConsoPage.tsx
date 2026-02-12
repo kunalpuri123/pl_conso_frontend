@@ -27,17 +27,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Play, RefreshCw, Download, RotateCcw, Loader2, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
-import type { Project, Site, Run, InputFile, RunLog } from '@/lib/supabase-types';
+import type { Project, Site, Run, RunLog } from '@/lib/supabase-types';
 
-const scopes = ['PL'];
+const scopes = ['PDP'];
 
-export function PLConsoPage() {
+export function PDPConsoPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [uploadingType, setUploadingType] = useState<'CRAWL' | 'MASTER' | null>(null);
   const [selectedIPFile, setSelectedIPFile] = useState<string>('');
   const [selectedMasterBucketFile, setSelectedMasterBucketFile] = useState<string>('');
   const [projectFilter, setProjectFilter] = useState<string>('');
@@ -47,7 +46,6 @@ export function PLConsoPage() {
   const [masterFileFilter, setMasterFileFilter] = useState<string>('');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [consoleLogs, setConsoleLogs] = useState<any[]>([]);
-  const [ipFileValidationError, setIpFileValidationError] = useState<string>('');
 
   const BUSINESS_GROUPS = {
   COTY: "COTY",
@@ -106,7 +104,6 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
   const [selectedSite, setSelectedSite] = useState<string>('');
   const [selectedScope, setSelectedScope] = useState<string>('');
   const [selectedCrawlFile, setSelectedCrawlFile] = useState<string>('');
-  const [selectedMasterFile, setSelectedMasterFile] = useState<string>('');
   
   // Current run being monitored
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
@@ -136,45 +133,44 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
     enabled: !!selectedProject,
   });
 
-  // Fetch input files
-  const { data: crawlFiles } = useQuery({
-    queryKey: ['input-files', 'CRAWL'],
+  // Fetch PDP input files (output from crawl)
+  const { data: pdpInputFiles } = useQuery({
+    queryKey: ['storage', 'pdp-input'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('input_files')
-        .select('*')
-        .eq('file_type', 'CRAWL')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.storage.from('pdp-input').list('', {
+        limit: 1000,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
       if (error) throw error;
-      return data as InputFile[];
+      return data;
     },
   });
 
-// Fetch crawl-input (IP) files from bucket
-const { data: crawlInputFiles } = useQuery({
-  queryKey: ['storage', 'crawl-input'],
-  queryFn: async () => {
-    const { data, error } = await supabase.storage.from('crawl-input').list('', {
-      limit: 1000,
-      sortBy: { column: 'created_at', order: 'desc' }
-    });
-    if (error) throw error;
-    return data;
-  },
-});
+  // Fetch PDP crawl-input (IP) files from bucket
+  const { data: crawlInputFiles } = useQuery({
+    queryKey: ['storage', 'pdp-crawl-input'],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from('pdp-crawl-input').list('', {
+        limit: 1000,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
 
-// Fetch masters files from bucket
-const { data: masterBucketFiles } = useQuery({
-  queryKey: ['storage', 'masters'],
-  queryFn: async () => {
-    const { data, error } = await supabase.storage.from('masters').list('', {
-      limit: 1000,
-      sortBy: { column: 'created_at', order: 'desc' }
-    });
-    if (error) throw error;
-    return data;
-  },
-});
+  // Fetch PDP masters files from bucket
+  const { data: masterBucketFiles } = useQuery({
+    queryKey: ['storage', 'pdp-masters'],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from('pdp-masters').list('', {
+        limit: 1000,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
 
 
   // Fetch runs history
@@ -227,9 +223,12 @@ const { data: masterBucketFiles } = useQuery({
     queryKey: ['run-logs', currentRunId],
     queryFn: async () => {
       if (!currentRunId) return [];
-      const res = await fetch(`https://pl-conso-backend.onrender.com/run/${currentRunId}/logs`);
-      if (!res.ok) throw new Error("Failed to load logs");
-      const data = await res.json();
+      const { data, error } = await supabase
+        .from('run_logs')
+        .select('*')
+        .eq('run_id', currentRunId)
+        .order('timestamp');
+      if (error) throw error;
       return data as RunLog[];
     },
     enabled: !!currentRunId,
@@ -263,13 +262,9 @@ const { data: masterBucketFiles } = useQuery({
   // Create run mutation
   const createRunMutation = useMutation({
     mutationFn: async () => {
-      const project = projects?.find((p) => p.id === selectedProject);
-      const site = sites?.find((s) => s.id === selectedSite);
-      const crawlFile = crawlFiles?.find((f) => f.id === selectedCrawlFile);
-
-if (!crawlFile) throw new Error("Please select crawl output file");
-if (!selectedIPFile) throw new Error("Please select crawl input file");
-if (!selectedMasterBucketFile) throw new Error("Please select master file");
+      if (!selectedCrawlFile) throw new Error("Please select PDP output file");
+      if (!selectedIPFile) throw new Error("Please select PDP crawl input file");
+      if (!selectedMasterBucketFile) throw new Error("Please select PDP master file");
 
       const { data, error } = await supabase
         .from('runs')
@@ -278,12 +273,12 @@ if (!selectedMasterBucketFile) throw new Error("Please select master file");
           project_id: selectedProject,
           site_id: selectedSite,
           scope: selectedScope,
-          op_filename: crawlFile.storage_path,     // uploaded OP
-ip_filename: selectedIPFile,          // from crawl-input bucket
-master_filename: selectedMasterBucketFile, // from masters bucket
+          op_filename: selectedCrawlFile,     // from pdp-input bucket
+          ip_filename: selectedIPFile,        // from pdp-crawl-input bucket
+          master_filename: selectedMasterBucketFile, // from pdp-masters bucket
 
           status: 'pending',
-          automation_slug: 'pl-conso',
+          automation_slug: 'pdp-conso',
         })
         .select()
         .single();
@@ -295,7 +290,7 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     setCurrentRunId(data.id);
     toast.success(`Run ${data.run_uuid} started`);
 
-    await fetch("https://pl-conso-backend.onrender.com/run/" + data.id, { method: "POST" });
+    await fetch("https://pl-conso-backend.onrender.com/pdp-run/" + data.id, { method: "POST" });
 
   refetchRuns();
 },
@@ -304,29 +299,14 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     },
   });
 
-  // Validate crawl file format
-  const validateCrawlFile = (filename: string, projectId: string, siteName: string, scope: string): boolean => {
-    const project = projects?.find((p) => p.id === projectId);
-    const projectName = project?.name || '';
-    
-    // For POC projects, relax the validation
-    if (projectName === 'POC') {
-      return true;
-    }
-    
-    // For non-POC projects, enforce strict format: {site}_{scope}_Template_YYYYMMDD.tsv
-    const pattern = new RegExp(`^${siteName}_${scope}_Template_\\d{8}\\.tsv$`, 'i');
-    return pattern.test(filename);
-  };
-
   const handleRunAutomation = () => {
     if (!selectedProject || !selectedSite || !selectedScope) {
       toast.error('Please select all required fields');
       return;
     }
     
-    if (!selectedIPFile) {
-      toast.error('Please select crawl input file');
+    if (!selectedCrawlFile || !selectedIPFile || !selectedMasterBucketFile) {
+      toast.error('Please select all PDP files');
       return;
     }
     
@@ -370,84 +350,25 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     return `${seconds}s`;
   };
 
-const handleUpload = async (
-  e: React.ChangeEvent<HTMLInputElement>,
-  type: 'CRAWL' | 'MASTER'
-) => {
+const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   try {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploadingType(type);
 
-    const originalName = file.name;
-    const extIndex = originalName.lastIndexOf(".");
-    const baseName =
-      extIndex !== -1 ? originalName.slice(0, extIndex) : originalName;
-    const extension =
-      extIndex !== -1 ? originalName.slice(extIndex) : "";
-
-    // 1️⃣ Fetch existing files with same base name
-    const { data: existingFiles, error: fetchError } = await supabase
-      .from("input_files")
-      .select("filename")
-      .ilike("filename", `${baseName}%${extension}`);
-
-    if (fetchError) throw fetchError;
-
-    // 2️⃣ Find next available suffix
-    let newFileName = originalName;
-
-    if (existingFiles && existingFiles.length > 0) {
-      let maxIndex = 0;
-
-      existingFiles.forEach((f) => {
-        const match = f.filename.match(
-          new RegExp(`^${baseName}-(\\d+)\\${extension}$`)
-        );
-        if (match && match[1]) {
-          const num = parseInt(match[1], 10);
-          if (num > maxIndex) maxIndex = num;
-        }
-      });
-
-      // If exact same filename already exists → start suffixing
-      const exactExists = existingFiles.some(
-        (f) => f.filename === originalName
-      );
-
-      if (exactExists) {
-        newFileName = `${baseName}-${maxIndex + 1}${extension}`;
-      }
-    }
-
-    // 3️⃣ Upload to storage
-    const filePath = `${type}/${Date.now()}_${newFileName}`;
-
+    const newFileName = `${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage
-      .from("input-files")
-      .upload(filePath, file);
+      .from("pdp-input")
+      .upload(newFileName, file);
 
     if (uploadError) throw uploadError;
 
-    // 4️⃣ Insert DB record
-    const { error: dbError } = await supabase.from("input_files").insert({
-      filename: newFileName,
-      file_type: type,
-      storage_path: filePath,
-      uploaded_by: user?.id,
-    });
-
-    if (dbError) throw dbError;
-
-    toast.success(`${type} file uploaded as ${newFileName}`);
-
-    queryClient.invalidateQueries({ queryKey: ['input-files', type] });
+    toast.success(`PDP output uploaded as ${newFileName}`);
+    queryClient.invalidateQueries({ queryKey: ['storage', 'pdp-input'] });
 
   } catch (err: any) {
     toast.error(err.message || "Upload failed");
   } finally {
-    setUploadingType(null);
     e.target.value = "";
   }
 };
@@ -468,7 +389,6 @@ const handleUpload = async (
               setSelectedSite('');
               setSelectedScope('');
               setSelectedCrawlFile('');
-              setIpFileValidationError('');
               setProjectFilter('');
               setSiteFilter('');
               setCrawlFileFilter('');
@@ -506,7 +426,6 @@ const handleUpload = async (
                 setSelectedSite(value);
                 setSelectedScope('');
                 setSelectedCrawlFile('');
-                setIpFileValidationError('');
                 setSiteFilter('');
                 setCrawlFileFilter('');
                 setCrawlInputFilter('');
@@ -542,7 +461,6 @@ const handleUpload = async (
             <Select value={selectedScope} onValueChange={(value) => {
               setSelectedScope(value);
               setSelectedCrawlFile('');
-              setIpFileValidationError('');
               setCrawlFileFilter('');
               setCrawlInputFilter('');
               setMasterFileFilter('');
@@ -561,50 +479,25 @@ const handleUpload = async (
           </div>
           <div className="space-y-2">
   <Label>
-    Crawl Input File
-    {(() => {
-      const project = projects?.find((p) => p.id === selectedProject);
-      return project?.name !== 'POC' && <span className="text-destructive"> *</span>;
-    })()}
+    PDP Output File <span className="text-destructive"> *</span>
   </Label>
 
   <Button variant="outline" asChild>
     <label className="cursor-pointer flex gap-2 items-center">
       <Upload className="h-4 w-4" />
-      Upload Crawl File
+      Upload PDP Output
       <input
         type="file"
         hidden
         accept=".csv,.tsv,.xlsx"
-        onChange={(e) => handleUpload(e, 'CRAWL')}
+        onChange={handleUpload}
       />
     </label>
   </Button>
 
-  <Select value={selectedCrawlFile} onValueChange={(value) => {
-    setSelectedCrawlFile(value);
-    // Validate on selection for non-POC projects
-    if (selectedProject && selectedSite && selectedScope) {
-      const project = projects?.find((p) => p.id === selectedProject);
-      const site = sites?.find((s) => s.id === selectedSite);
-      const file = crawlFiles?.find((f) => f.id === value);
-      
-      if (project?.name !== 'POC' && file) {
-        const isValid = validateCrawlFile(file.filename, selectedProject, site?.name || '', selectedScope);
-        if (!isValid) {
-          const siteName = site?.name || '';
-          const expectedFormat = `${siteName}_${selectedScope}_Template_YYYYMMDD.tsv`;
-          setIpFileValidationError(`File must follow format: ${expectedFormat}`);
-        } else {
-          setIpFileValidationError('');
-        }
-      } else {
-        setIpFileValidationError('');
-      }
-    }
-  }}>
-    <SelectTrigger className={ipFileValidationError ? 'border-destructive' : ''}>
-      <SelectValue placeholder="Select input file" />
+  <Select value={selectedCrawlFile} onValueChange={setSelectedCrawlFile}>
+    <SelectTrigger>
+      <SelectValue placeholder="Select PDP output file" />
     </SelectTrigger>
     <SelectContent>
       <div className="px-2 py-2">
@@ -615,25 +508,22 @@ const handleUpload = async (
           className="w-full border rounded px-2 py-1"
         />
       </div>
-      {crawlFiles
-        ?.filter((f) => f.filename.toLowerCase().includes(crawlFileFilter.toLowerCase()))
+      {pdpInputFiles
+        ?.filter((f) => f.name.toLowerCase().includes(crawlFileFilter.toLowerCase()))
         .map((file) => (
-          <SelectItem key={file.id} value={file.id}>
-            {file.filename}
+          <SelectItem key={file.name} value={file.name}>
+            {file.name}
           </SelectItem>
         ))}
     </SelectContent>
   </Select>
-  {ipFileValidationError && (
-    <p className="text-sm text-destructive">{ipFileValidationError}</p>
-  )}
 </div>
 
 <div className="space-y-2">
-  <Label>Crawl Input (IP) File</Label>
+  <Label>PDP Crawl Input File <span className="text-destructive"> *</span></Label>
   <Select value={selectedIPFile} onValueChange={setSelectedIPFile}>
       <SelectTrigger>
-        <SelectValue placeholder="Select crawl input file" />
+        <SelectValue placeholder="Select PDP crawl input file" />
       </SelectTrigger>
       <SelectContent>
         <div className="px-2 py-2">
@@ -656,10 +546,10 @@ const handleUpload = async (
 </div>
 
 <div className="space-y-2">
-  <Label>Master File</Label>
+  <Label>PDP Master File <span className="text-destructive"> *</span></Label>
   <Select value={selectedMasterBucketFile} onValueChange={setSelectedMasterBucketFile}>
     <SelectTrigger>
-      <SelectValue placeholder="Select master file" />
+      <SelectValue placeholder="Select PDP master file" />
     </SelectTrigger>
     <SelectContent>
       <div className="px-2 py-2">
@@ -683,7 +573,7 @@ const handleUpload = async (
 
           <Button
             onClick={handleRunAutomation}
-            disabled={createRunMutation.isPending || !selectedProject || !selectedSite || !selectedScope || !selectedCrawlFile || !!ipFileValidationError}
+            disabled={createRunMutation.isPending || !selectedProject || !selectedSite || !selectedScope || !selectedCrawlFile || !selectedIPFile || !selectedMasterBucketFile}
             className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
           >
             {createRunMutation.isPending ? (
@@ -776,6 +666,10 @@ const handleUpload = async (
       "pl-conso": {
         label: "PL Conso",
         className: "bg-purple-500 text-white"
+      },
+      "pdp-conso": {
+        label: "PDP Conso",
+        className: "bg-emerald-600 text-white"
       }
     };
 
@@ -827,7 +721,7 @@ const handleUpload = async (
         }
 
         const { data: file } = await supabase.storage
-          .from("run-outputs")
+          .from("pdp-run-output")
           .download(data.storage_path);
 
         const url = URL.createObjectURL(file);
@@ -848,7 +742,7 @@ const handleUpload = async (
       disabled={run.status === "cancelled"}
       onClick={async () => {
         if (run.status === "cancelled") return;
-        await fetch(`https://pl-conso-backend.onrender.com/run/${run.id}/rerun`, {
+        await fetch(`https://pl-conso-backend.onrender.com/pdp-run/${run.id}/rerun`, {
   method: "POST",
 });
 
@@ -965,6 +859,10 @@ const handleUpload = async (
       "pl-conso": {
         label: "PL Conso",
         className: "bg-purple-500 text-white"
+      },
+      "pdp-conso": {
+        label: "PDP Conso",
+        className: "bg-emerald-600 text-white"
       }
     };
 
@@ -1000,4 +898,4 @@ const handleUpload = async (
   );
 }
 
-export default PLConsoPage;
+export default PDPConsoPage;

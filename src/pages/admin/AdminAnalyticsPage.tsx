@@ -280,6 +280,7 @@ const {
     <SelectItem value="all">All Automation</SelectItem>
     <SelectItem value="pl-input">PL Input</SelectItem>
     <SelectItem value="pl-conso">PL Conso</SelectItem>
+    <SelectItem value="pdp-conso">PDP Conso</SelectItem>
   </SelectContent>
 </Select>
 
@@ -442,7 +443,8 @@ const {
   {(() => {
     const map: Record<string, { label: string; className: string }> = {
       "pl-input": { label: "PL Input", className: "bg-blue-500 text-white" },
-      "pl-conso": { label: "PL Conso", className: "bg-purple-500 text-white" }
+      "pl-conso": { label: "PL Conso", className: "bg-purple-500 text-white" },
+      "pdp-conso": { label: "PDP Conso", className: "bg-emerald-600 text-white" }
     };
 
     const config = map[run.automation_slug ?? ""];
