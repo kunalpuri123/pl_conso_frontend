@@ -233,7 +233,10 @@ const { data: masterBucketFiles } = useQuery({
       const sorted = (data as RunLog[]).slice().sort((a: any, b: any) => {
         const ta = a.timestamp ?? a.created_at ?? 0;
         const tb = b.timestamp ?? b.created_at ?? 0;
-        return new Date(ta).getTime() - new Date(tb).getTime();
+        const dt = new Date(ta).getTime() - new Date(tb).getTime();
+        if (dt !== 0) return dt;
+        if (a.id != null && b.id != null) return a.id - b.id;
+        return 0;
       });
       return sorted;
     },
@@ -719,14 +722,17 @@ const handleUpload = async (
         <CardContent className="flex-1 min-h-0">
           <ScrollArea className="h-[300px] bg-primary rounded-md p-4 font-mono text-sm">
             {currentLogs && currentLogs.length > 0 ? (
-              currentLogs.map((log) => (
-                <div key={log.id} className={`${getLogColor(log.level)}`}>
-                  <span className="text-muted-foreground">
-                    [{format(new Date(log.timestamp), 'HH:mm:ss')}]
-                  </span>{' '}
-                  <span className="font-semibold">[{log.level}]</span> {log.message}
-                </div>
-              ))
+              currentLogs.map((log) => {
+                const ts = log.timestamp ?? log.created_at;
+                return (
+                  <div key={log.id} className={`${getLogColor(log.level)}`}>
+                    <span className="text-muted-foreground">
+                      [{format(new Date(ts), 'HH:mm:ss')}]
+                    </span>{' '}
+                    <span className="font-semibold">[{log.level}]</span> {log.message}
+                  </div>
+                );
+              })
             ) : (
               <div className="text-muted-foreground text-center py-8">
                 {currentRunId
