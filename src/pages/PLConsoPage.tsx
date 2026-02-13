@@ -230,7 +230,12 @@ const { data: masterBucketFiles } = useQuery({
       const res = await fetch(`https://pl-conso-backend.onrender.com/run/${currentRunId}/logs`);
       if (!res.ok) throw new Error("Failed to load logs");
       const data = await res.json();
-      return data as RunLog[];
+      const sorted = (data as RunLog[]).slice().sort((a: any, b: any) => {
+        const ta = a.timestamp ?? a.created_at ?? 0;
+        const tb = b.timestamp ?? b.created_at ?? 0;
+        return new Date(ta).getTime() - new Date(tb).getTime();
+      });
+      return sorted;
     },
     enabled: !!currentRunId,
     refetchInterval: currentRunId ? 2000 : false,
