@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { MessageSquare, Send, Paperclip } from 'lucide-react';
+import { sanitizePlainText } from '@/lib/sanitize';
 
 const feedbackSchema = z.object({
   subject: z.string().min(1, 'Please select a subject'),
@@ -90,10 +91,12 @@ export function FeedbackPage() {
       }
 
       // Insert feedback
+      const safeSubject = sanitizePlainText(data.subject.trim());
+      const safeMessage = sanitizePlainText(data.message.trim());
       const { error } = await supabase.from('feedback').insert({
         user_id: user.id,
-        subject: data.subject,
-        message: data.message,
+        subject: safeSubject,
+        message: safeMessage,
         attachment_path: attachmentPath,
       });
 

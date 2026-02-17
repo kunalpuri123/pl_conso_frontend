@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, User, Mail, Calendar, Shield, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { sanitizePlainText } from '@/lib/sanitize';
 import {
   Dialog,
   DialogContent,
@@ -56,8 +57,8 @@ export default function ProfilePage() {
       const { error } = await supabase
         .from('profiles')
         .update({
-          full_name: formData.full_name,
-          username: formData.username,
+          full_name: sanitizePlainText(formData.full_name.trim()),
+          username: sanitizePlainText(formData.username.trim()),
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user.id);
