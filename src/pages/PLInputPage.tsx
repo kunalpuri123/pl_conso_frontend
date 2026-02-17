@@ -29,6 +29,7 @@ import { Play, RefreshCw, Download, RotateCcw, Loader2,Upload } from 'lucide-rea
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Project, Site, Run, InputFile, RunLog } from '@/lib/supabase-types';
+import { backendFetch } from '@/lib/backendApi';
 
 const scopes = ['PL'];
 
@@ -309,9 +310,7 @@ automation_slug: 'pl-input',
     setCurrentRunId(data.id);
     toast.success(`Run ${data.run_uuid} started`);
 
-    await fetch("https://pl-conso-backend.onrender.com/input-run/" + data.id, {
-    method: "POST",
-    });
+    await backendFetch(`/input-run/${data.id}`, { method: 'POST' });
 
   refetchRuns();
 },
@@ -791,9 +790,7 @@ URL.revokeObjectURL(url);
       disabled={run.status === "cancelled"}
       onClick={async () => {
         if (run.status === "cancelled") return;
-        await fetch(`https://pl-conso-backend.onrender.com/input-run/${run.id}/rerun`, {
-          method: "POST",
-        });
+        await backendFetch(`/input-run/${run.id}/rerun`, { method: 'POST' });
 
         refetchRuns();
       }}
@@ -823,9 +820,7 @@ URL.revokeObjectURL(url);
       return;
     }
 
-    await fetch(`https://pl-conso-backend.onrender.com/runs/${run.id}/cancel`, {
-      method: "POST",
-    });
+    await backendFetch(`/runs/${run.id}/cancel`, { method: 'POST' });
 
     toast.success("Run cancelled");
 

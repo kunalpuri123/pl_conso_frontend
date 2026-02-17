@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import type { Project } from "@/lib/supabase-types";
+import { backendBlob } from "@/lib/backendApi";
 
 export function AdminAnalyticsPage() {
   const [dateRange, setDateRange] = useState("7");
@@ -156,14 +157,7 @@ const {
   // ------------------- DOWNLOAD AI PDF -------------------
   async function downloadAIReport(runId: string) {
     try {
-      const res = await fetch(`https://pl-conso-backend.onrender.com/run/${runId}/ai-report-pdf`);
-
-      if (!res.ok) {
-        alert("AI report not available yet");
-        return;
-      }
-
-      const blob = await res.blob();
+      const blob = await backendBlob(`/run/${runId}/ai-report-pdf`);
       const url = window.URL.createObjectURL(blob);
 
       const a = document.createElement("a");

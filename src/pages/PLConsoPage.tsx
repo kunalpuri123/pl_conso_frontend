@@ -28,6 +28,7 @@ import { Play, RefreshCw, Download, RotateCcw, Loader2, Upload, Trash2 } from 'l
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Project, Site, Run, InputFile, RunLog } from '@/lib/supabase-types';
+import { backendFetch, backendJson } from '@/lib/backendApi';
 
 const scopes = ['PL'];
 
@@ -227,9 +228,7 @@ const { data: masterBucketFiles } = useQuery({
     queryKey: ['run-logs', currentRunId],
     queryFn: async () => {
       if (!currentRunId) return [];
-      const res = await fetch(`https://pl-conso-backend.onrender.com/run/${currentRunId}/logs`);
-      if (!res.ok) throw new Error("Failed to load logs");
-      const data = await res.json();
+      const data = await backendJson<RunLog[]>(`/run/${currentRunId}/logs`);
       const sorted = (data as RunLog[]).slice().sort((a: any, b: any) => {
         const ta = a.timestamp ?? a.created_at ?? 0;
         const tb = b.timestamp ?? b.created_at ?? 0;
@@ -303,7 +302,7 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     setCurrentRunId(data.id);
     toast.success(`Run ${data.run_uuid} started`);
 
-    await fetch("https://pl-conso-backend.onrender.com/run/" + data.id, { method: "POST" });
+    await backendFetch(`/run/${data.id}`, { method: 'POST' });
 
   refetchRuns();
 },
@@ -859,9 +858,7 @@ const handleUpload = async (
       disabled={run.status === "cancelled"}
       onClick={async () => {
         if (run.status === "cancelled") return;
-        await fetch(`https://pl-conso-backend.onrender.com/run/${run.id}/rerun`, {
-  method: "POST",
-});
+        await backendFetch(`/run/${run.id}/rerun`, { method: 'POST' });
 
         refetchRuns();
       }}
@@ -892,9 +889,7 @@ const handleUpload = async (
             return;
           }
 
-          await fetch(`https://pl-conso-backend.onrender.com/runs/${run.id}/cancel`, {
-            method: "POST",
-          });
+          await backendFetch(`/runs/${run.id}/cancel`, { method: 'POST' });
 
           toast.success("Run cancelled");
 

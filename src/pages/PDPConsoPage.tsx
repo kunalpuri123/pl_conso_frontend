@@ -28,6 +28,7 @@ import { Play, RefreshCw, Download, RotateCcw, Loader2, Upload, Trash2 } from 'l
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { Project, Site, Run, RunLog } from '@/lib/supabase-types';
+import { backendFetch } from '@/lib/backendApi';
 
 const scopes = ['PDP'];
 
@@ -298,7 +299,7 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
     setCurrentRunId(data.id);
     toast.success(`Run ${data.run_uuid} started`);
 
-    await fetch("https://pl-conso-backend.onrender.com/pdp-run/" + data.id, { method: "POST" });
+    await backendFetch(`/pdp-run/${data.id}`, { method: 'POST' });
 
   refetchRuns();
 },
@@ -753,9 +754,7 @@ const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       disabled={run.status === "cancelled"}
       onClick={async () => {
         if (run.status === "cancelled") return;
-        await fetch(`https://pl-conso-backend.onrender.com/pdp-run/${run.id}/rerun`, {
-  method: "POST",
-});
+        await backendFetch(`/pdp-run/${run.id}/rerun`, { method: 'POST' });
 
         refetchRuns();
       }}
@@ -786,9 +785,7 @@ const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             return;
           }
 
-          await fetch(`https://pl-conso-backend.onrender.com/runs/${run.id}/cancel`, {
-            method: "POST",
-          });
+          await backendFetch(`/runs/${run.id}/cancel`, { method: 'POST' });
 
           toast.success("Run cancelled");
 
