@@ -682,6 +682,10 @@ const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       "pdp-conso": {
         label: "PDP Conso",
         className: "bg-emerald-600 text-white"
+      },
+      "pp-conso": {
+        label: "AE PP Conso",
+        className: "bg-orange-500 text-white"
       }
     };
 
@@ -871,6 +875,10 @@ const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       "pdp-conso": {
         label: "PDP Conso",
         className: "bg-emerald-600 text-white"
+      },
+      "pp-conso": {
+        label: "AE PP Conso",
+        className: "bg-orange-500 text-white"
       }
     };
 

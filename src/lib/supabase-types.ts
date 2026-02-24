@@ -60,6 +60,7 @@ export interface Run {
   project_id: string | null;
   site_id: string | null;
   scope: string | null;
+  ae_filename?: string | null;
   crawl_filename: string | null;
   master_filename: string | null;
   status: RunStatus;

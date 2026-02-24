@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import HomePage from "@/pages/HomePage";
 import PLConsoPage from "@/pages/PLConsoPage";
 import PDPConsoPage from "@/pages/PDPConsoPage";
+import PPConsoPage from "@/pages/PPConsoPage";
 import DownloadsPage from "@/pages/DownloadsPage";
 import AdminUsersPage from "@/pages/admin/AdminUsersPage";
 import AdminFilesPage from "@/pages/admin/AdminFilesPage";
@@ -46,6 +47,7 @@ const App = () => (
               <Route path="automation/pl-conso" element={<PLConsoPage />} />
               <Route path="automation/pl-input" element={<PLInputPage />} />
               <Route path="automation/pdp-conso" element={<PDPConsoPage />} />
+              <Route path="automation/pp-conso" element={<PPConsoPage />} />
               <Route path="analytics" element={<AdminAnalyticsPage />} />
               <Route path="downloads" element={<DownloadsPage />} />
 

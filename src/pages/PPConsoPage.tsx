@@ -27,28 +27,75 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Play, RefreshCw, Download, RotateCcw, Loader2, Upload, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
-import type { Project, Site, Run, InputFile, RunLog } from '@/lib/supabase-types';
-import { backendFetch, backendJson } from '@/lib/backendApi';
+import type { Project, Site, Run, RunLog } from '@/lib/supabase-types';
+import { backendFetch } from '@/lib/backendApi';
 
-const scopes = ['PL'];
+const scopes = ['PP'];
+type PPRunMode = 'fresh' | 'revalidation';
 
-export function PLConsoPage() {
+const TEMPLATE_REQUIRED_SOURCE_FILES = [
+  "COTY_Benelux_Consumer Beauty_Animation_Exposure_All_Data_2025-12-29_All_All_All",
+  "COTY_Benelux_Prestige_Animation_Exposure_All_Data_2025-12-29_All_All_All",
+  "COTY_ES_Consumer Beauty_Animation_Exposure_All_Data_2025-12-29_All_All_All",
+  "COTY_ES_Prestige_Animation_Exposure_All_Data_2025-12-29_All_All_All",
+  "COTY_Argentina_Consumer_Beauty_Animation_Exposure_All_Data_2025-12-30_All_All_All.tsv",
+  "COTY_Argentina_Prestige_Animation_Exposure_All_Data_2025-12-30_All_All_All.tsv",
+  "COTY_South_Africa_Consumer_Beauty_Animation_Exposure_All_Data_2025-12-31_All_All_All.tsv",
+  "COTY_South_Africa_Prestige_Animation_Exposure_All_Data_2025-12-31_All_All_All.tsv",
+  "COTY_UK_Consumer Beauty_Animation_Exposure_All_Data_2026-01-07_All_All_All.tsv",
+  "COTY_UK_Prestige_Animation_Exposure_All_Data_2026-01-07_All_All_All.tsv",
+  "Hermes_America_AE_Template_All_Data_2026-01-07_All_All_All.tsv",
+  "Hermes_Europe_AE_Template_All_Data_2026-01-07_All_All_All.tsv",
+  "COTY_Brazil_Prestige_Animation_Exposure_All_Data_2026-01-08_All_All_All.tsv",
+  "COTY_Animation_Exposure_All_Data_2026-01-21_All_All_All.tsv",
+  "COTY_FR_Consumer Beauty_Animation_Exposure_All_Data_2026-01-19_All_All_All.tsv",
+  "COTY_FR_Prestige_Animation_Exposure_All_Data_2026-01-19_All_All_All.tsv",
+  "Grocery_POC_US_Aerated_Beverages_Animation_Exposure_All_Data_2026-01-26_All_All_All.tsv",
+  "Grocery_POC_US_Energy_Bars_Animation_Exposure_All_Data_2026-01-26_All_All_All.tsv",
+  "Grocery_POC_US_Beer_Animation_Exposure_All_Data_2026-02-05_All_All_All.tsv",
+  "Grocery_POC_US_Cheese_Animation_Exposure_All_Data_2026-02-05_All_All_All.tsv",
+  "Grocery_POC_US_Coffee_Creamers_Animation_Exposure_All_Data_2026-02-05_All_All_All.tsv",
+  "Grocery_POC_US_Frozen_Foods_Animation_Exposure_All_Data_2026-02-05_All_All_All.tsv",
+  "Grocery_POC_US_Sparkling_Water_Animation_Exposure_All_Data_2026-02-05_All_All_All.tsv",
+  "Grocery_POC_US_Toilet_Paper_Animation_Exposure_All_Data_2026-02-05_All_All_All.tsv",
+  "Grocery_POC_US_Vodka_Animation_Exposure_All_Data_2026-02-05_All_All_All.tsv",
+  "COTY_Canada_Consumer Beauty_Animation_Exposure_All_Data_2026-02-18_All_All_All.tsv",
+];
+
+const normalizeSourceFilename = (name: string) => {
+  let n = (name || "")
+    .trim()
+    .replace(/\.tsv$/i, "")
+    .replace(/\d{4}-\d{2}-\d{2}/g, "")
+    .replace(/[\s_]+/g, " ")
+    .trim()
+    .toLowerCase();
+  n = n.replace(/\ball all all\b/g, "").replace(/\s+/g, " ").trim();
+  return n;
+};
+
+const REQUIRED_SOURCE_PATTERNS = Array.from(
+  new Set(TEMPLATE_REQUIRED_SOURCE_FILES.map((f) => normalizeSourceFilename(f)))
+);
+
+export function PPConsoPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [uploadingType, setUploadingType] = useState<'CRAWL' | 'MASTER' | null>(null);
   const [selectedIPFile, setSelectedIPFile] = useState<string>('');
   const [selectedMasterBucketFile, setSelectedMasterBucketFile] = useState<string>('');
+  const [selectedAETemplateFile, setSelectedAETemplateFile] = useState<string>('');
+  const [runMode, setRunMode] = useState<PPRunMode>('fresh');
   const [projectFilter, setProjectFilter] = useState<string>('');
   const [siteFilter, setSiteFilter] = useState<string>('');
   const [crawlFileFilter, setCrawlFileFilter] = useState<string>('');
   const [crawlInputFilter, setCrawlInputFilter] = useState<string>('');
   const [masterFileFilter, setMasterFileFilter] = useState<string>('');
+  const [aeTemplateFilter, setAETemplateFilter] = useState<string>('');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [consoleLogs, setConsoleLogs] = useState<any[]>([]);
-  const [ipFileValidationError, setIpFileValidationError] = useState<string>('');
 
   const BUSINESS_GROUPS = {
   COTY: "COTY",
@@ -107,7 +154,6 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
   const [selectedSite, setSelectedSite] = useState<string>('');
   const [selectedScope, setSelectedScope] = useState<string>('');
   const [selectedCrawlFile, setSelectedCrawlFile] = useState<string>('');
-  const [selectedMasterFile, setSelectedMasterFile] = useState<string>('');
   
   // Current run being monitored
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
@@ -121,6 +167,11 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
       return data as Project[];
     },
   });
+  const isAETemplateRequired =
+    !!selectedCrawlFile &&
+    REQUIRED_SOURCE_PATTERNS.some((pattern) =>
+      normalizeSourceFilename(selectedCrawlFile).startsWith(pattern)
+    );
 
   // Fetch sites for selected project
   const { data: sites } = useQuery({
@@ -137,45 +188,57 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
     enabled: !!selectedProject,
   });
 
-  // Fetch input files
-  const { data: crawlFiles } = useQuery({
-    queryKey: ['input-files', 'CRAWL'],
+  // Fetch AE PP input files (output from crawl)
+  const { data: pdpInputFiles } = useQuery({
+    queryKey: ['storage', 'pp-input'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('input_files')
-        .select('*')
-        .eq('file_type', 'CRAWL')
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.storage.from('pp-input').list('', {
+        limit: 1000,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
       if (error) throw error;
-      return data as InputFile[];
+      return data;
     },
   });
 
-// Fetch crawl-input (IP) files from bucket
-const { data: crawlInputFiles } = useQuery({
-  queryKey: ['storage', 'crawl-input'],
-  queryFn: async () => {
-    const { data, error } = await supabase.storage.from('crawl-input').list('', {
-      limit: 1000,
-      sortBy: { column: 'created_at', order: 'desc' }
-    });
-    if (error) throw error;
-    return data;
-  },
-});
+  // Fetch AE PP crawl-input (IP) files from bucket
+  const { data: crawlInputFiles } = useQuery({
+    queryKey: ['storage', 'pp-review-input'],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from('pp-review-input').list('', {
+        limit: 1000,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
 
-// Fetch masters files from bucket
-const { data: masterBucketFiles } = useQuery({
-  queryKey: ['storage', 'masters'],
-  queryFn: async () => {
-    const { data, error } = await supabase.storage.from('masters').list('', {
-      limit: 1000,
-      sortBy: { column: 'created_at', order: 'desc' }
-    });
-    if (error) throw error;
-    return data;
-  },
-});
+  // Fetch AE PP references files from bucket
+  const { data: masterBucketFiles } = useQuery({
+    queryKey: ['storage', 'pp-reference'],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from('pp-reference').list('', {
+        limit: 1000,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch AE template files from bucket
+  const { data: aeTemplateFiles } = useQuery({
+    queryKey: ['storage', 'pp-ae-checks'],
+    queryFn: async () => {
+      const { data, error } = await supabase.storage.from('pp-ae-checks').list('', {
+        limit: 1000,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
 
 
   // Fetch runs history
@@ -228,7 +291,12 @@ const { data: masterBucketFiles } = useQuery({
     queryKey: ['run-logs', currentRunId],
     queryFn: async () => {
       if (!currentRunId) return [];
-      const data = await backendJson<RunLog[]>(`/run/${currentRunId}/logs`);
+      const { data, error } = await supabase
+        .from('run_logs')
+        .select('*')
+        .eq('run_id', currentRunId)
+        .order('timestamp');
+      if (error) throw error;
       const sorted = (data as RunLog[]).slice().sort((a: any, b: any) => {
         const ta = a.timestamp ?? a.created_at ?? 0;
         const tb = b.timestamp ?? b.created_at ?? 0;
@@ -270,13 +338,16 @@ const { data: masterBucketFiles } = useQuery({
   // Create run mutation
   const createRunMutation = useMutation({
     mutationFn: async () => {
-      const project = projects?.find((p) => p.id === selectedProject);
-      const site = sites?.find((s) => s.id === selectedSite);
-      const crawlFile = crawlFiles?.find((f) => f.id === selectedCrawlFile);
-
-if (!crawlFile) throw new Error("Please select crawl output file");
-if (!selectedIPFile) throw new Error("Please select crawl input file");
-if (!selectedMasterBucketFile) throw new Error("Please select master file");
+      if (!selectedMasterBucketFile) throw new Error("Please select AE PP reference file");
+      if (isAETemplateRequired && !selectedAETemplateFile) {
+        throw new Error("Please select AE PP template file");
+      }
+      if (runMode === 'fresh' && !selectedCrawlFile) {
+        throw new Error("Please select AE PP source file");
+      }
+      if (runMode === 'revalidation' && !selectedIPFile) {
+        throw new Error("Please select AE PP review file for revalidation");
+      }
 
       const { data, error } = await supabase
         .from('runs')
@@ -285,12 +356,13 @@ if (!selectedMasterBucketFile) throw new Error("Please select master file");
           project_id: selectedProject,
           site_id: selectedSite,
           scope: selectedScope,
-          op_filename: crawlFile.storage_path,     // uploaded OP
-ip_filename: selectedIPFile,          // from crawl-input bucket
-master_filename: selectedMasterBucketFile, // from masters bucket
+          op_filename: selectedCrawlFile || null,     // from pp-input bucket
+          ip_filename: selectedIPFile || null,        // from pp-review-input bucket
+          master_filename: selectedMasterBucketFile, // from pp-reference bucket
+          ae_filename: isAETemplateRequired ? (selectedAETemplateFile || null) : null, // from pp-ae-checks bucket
 
           status: 'pending',
-          automation_slug: 'pl-conso',
+          automation_slug: 'pp-conso',
         })
         .select()
         .single();
@@ -302,7 +374,7 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     setCurrentRunId(data.id);
     toast.success(`Run ${data.run_uuid} started`);
 
-    await backendFetch(`/run/${data.id}`, { method: 'POST' });
+    await backendFetch(`/pp-run/${data.id}`, { method: 'POST' });
 
   refetchRuns();
 },
@@ -311,34 +383,41 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     },
   });
 
-  // Validate crawl file format
-  const validateCrawlFile = (filename: string, projectId: string, siteName: string, scope: string): boolean => {
-    const project = projects?.find((p) => p.id === projectId);
-    const projectName = project?.name || '';
-    
-    // For POC projects, relax the validation
-    if (projectName === 'POC') {
-      return true;
-    }
-    
-    // For non-POC projects, enforce strict format: {site}_{scope}_Template_YYYYMMDD.tsv
-    const pattern = new RegExp(`^${siteName}_${scope}_Template_\\d{8}\\.tsv$`, 'i');
-    return pattern.test(filename);
-  };
-
   const handleRunAutomation = () => {
     if (!selectedProject || !selectedSite || !selectedScope) {
       toast.error('Please select all required fields');
       return;
     }
-    
-    if (!selectedIPFile) {
-      toast.error('Please select crawl input file');
+
+    if (!selectedMasterBucketFile) {
+      toast.error('Please select AE PP reference file');
+      return;
+    }
+    if (isAETemplateRequired && !selectedAETemplateFile) {
+      toast.error('Please select AE PP template file');
+      return;
+    }
+
+    if (runMode === 'fresh' && !selectedCrawlFile) {
+      toast.error('Please select AE PP source file');
+      return;
+    }
+
+    if (runMode === 'revalidation' && !selectedIPFile) {
+      toast.error('Please select AE PP review file for revalidation');
       return;
     }
     
     createRunMutation.mutate();
   };
+
+  const canRunAutomation =
+    !!selectedProject &&
+    !!selectedSite &&
+    !!selectedScope &&
+    !!selectedMasterBucketFile &&
+    (!isAETemplateRequired || !!selectedAETemplateFile) &&
+    (runMode === 'fresh' ? !!selectedCrawlFile : !!selectedIPFile);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -377,84 +456,47 @@ master_filename: selectedMasterBucketFile, // from masters bucket
     return `${seconds}s`;
   };
 
-const handleUpload = async (
-  e: React.ChangeEvent<HTMLInputElement>,
-  type: 'CRAWL' | 'MASTER'
-) => {
+const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
   try {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploadingType(type);
 
-    const originalName = file.name;
-    const extIndex = originalName.lastIndexOf(".");
-    const baseName =
-      extIndex !== -1 ? originalName.slice(0, extIndex) : originalName;
-    const extension =
-      extIndex !== -1 ? originalName.slice(extIndex) : "";
-
-    // 1️⃣ Fetch existing files with same base name
-    const { data: existingFiles, error: fetchError } = await supabase
-      .from("input_files")
-      .select("filename")
-      .ilike("filename", `${baseName}%${extension}`);
-
-    if (fetchError) throw fetchError;
-
-    // 2️⃣ Find next available suffix
-    let newFileName = originalName;
-
-    if (existingFiles && existingFiles.length > 0) {
-      let maxIndex = 0;
-
-      existingFiles.forEach((f) => {
-        const match = f.filename.match(
-          new RegExp(`^${baseName}-(\\d+)\\${extension}$`)
-        );
-        if (match && match[1]) {
-          const num = parseInt(match[1], 10);
-          if (num > maxIndex) maxIndex = num;
-        }
-      });
-
-      // If exact same filename already exists → start suffixing
-      const exactExists = existingFiles.some(
-        (f) => f.filename === originalName
-      );
-
-      if (exactExists) {
-        newFileName = `${baseName}-${maxIndex + 1}${extension}`;
-      }
-    }
-
-    // 3️⃣ Upload to storage
-    const filePath = `${type}/${Date.now()}_${newFileName}`;
-
+    const newFileName = `${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage
-      .from("input-files")
-      .upload(filePath, file);
+      .from("pp-input")
+      .upload(newFileName, file);
 
     if (uploadError) throw uploadError;
 
-    // 4️⃣ Insert DB record
-    const { error: dbError } = await supabase.from("input_files").insert({
-      filename: newFileName,
-      file_type: type,
-      storage_path: filePath,
-      uploaded_by: user?.id,
-    });
-
-    if (dbError) throw dbError;
-
-    toast.success(`${type} file uploaded as ${newFileName}`);
-
-    queryClient.invalidateQueries({ queryKey: ['input-files', type] });
+    toast.success(`AE PP source uploaded as ${newFileName}`);
+    queryClient.invalidateQueries({ queryKey: ['storage', 'pp-input'] });
 
   } catch (err: any) {
     toast.error(err.message || "Upload failed");
   } finally {
-    setUploadingType(null);
+    e.target.value = "";
+  }
+};
+
+const handleReviewReupload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  try {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const newFileName = `${Date.now()}_${file.name}`;
+    const { error: uploadError } = await supabase.storage
+      .from("pp-review-input")
+      .upload(newFileName, file);
+
+    if (uploadError) throw uploadError;
+
+    setSelectedIPFile(newFileName);
+    toast.success(`AE PP review re-uploaded as ${newFileName}`);
+    queryClient.invalidateQueries({ queryKey: ['storage', 'pp-review-input'] });
+  } catch (err: any) {
+    toast.error(err.message || "Review re-upload failed");
+  } finally {
     e.target.value = "";
   }
 };
@@ -475,12 +517,13 @@ const handleUpload = async (
               setSelectedSite('');
               setSelectedScope('');
               setSelectedCrawlFile('');
-              setIpFileValidationError('');
+              setSelectedAETemplateFile('');
               setProjectFilter('');
               setSiteFilter('');
               setCrawlFileFilter('');
               setCrawlInputFilter('');
               setMasterFileFilter('');
+              setAETemplateFilter('');
             }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select project" />
@@ -513,11 +556,12 @@ const handleUpload = async (
                 setSelectedSite(value);
                 setSelectedScope('');
                 setSelectedCrawlFile('');
-                setIpFileValidationError('');
+                setSelectedAETemplateFile('');
                 setSiteFilter('');
                 setCrawlFileFilter('');
                 setCrawlInputFilter('');
                 setMasterFileFilter('');
+                setAETemplateFilter('');
               }}
               disabled={!selectedProject}
             >
@@ -549,10 +593,10 @@ const handleUpload = async (
             <Select value={selectedScope} onValueChange={(value) => {
               setSelectedScope(value);
               setSelectedCrawlFile('');
-              setIpFileValidationError('');
               setCrawlFileFilter('');
               setCrawlInputFilter('');
               setMasterFileFilter('');
+              setAETemplateFilter('');
             }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select scope" />
@@ -566,52 +610,60 @@ const handleUpload = async (
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-2">
+            <Label>Execution Mode <span className="text-destructive">*</span></Label>
+            <div className="w-full rounded-lg border bg-muted/40 p-1 grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                onClick={() => setRunMode('fresh')}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                  runMode === 'fresh'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Fresh Run
+              </button>
+              <button
+                type="button"
+                onClick={() => setRunMode('revalidation')}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                  runMode === 'revalidation'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Revalidation
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {runMode === 'fresh'
+                ? 'Use source + reference files to run a new AE PP check.'
+                : 'Upload corrected review file and validate again.'}
+            </p>
+          </div>
           <div className="space-y-2">
   <Label>
-    Crawl Input File
-    {(() => {
-      const project = projects?.find((p) => p.id === selectedProject);
-      return project?.name !== 'POC' && <span className="text-destructive"> *</span>;
-    })()}
+    AE PP Source File {runMode === 'fresh' ? <span className="text-destructive"> *</span> : null}
   </Label>
 
   <Button variant="outline" asChild>
     <label className="cursor-pointer flex gap-2 items-center">
       <Upload className="h-4 w-4" />
-      Upload Crawl File
+      Upload AE PP Source
       <input
         type="file"
         hidden
         accept=".csv,.tsv,.xlsx"
-        onChange={(e) => handleUpload(e, 'CRAWL')}
+        onChange={handleUpload}
       />
     </label>
   </Button>
 
-  <Select value={selectedCrawlFile} onValueChange={(value) => {
-    setSelectedCrawlFile(value);
-    // Validate on selection for non-POC projects
-    if (selectedProject && selectedSite && selectedScope) {
-      const project = projects?.find((p) => p.id === selectedProject);
-      const site = sites?.find((s) => s.id === selectedSite);
-      const file = crawlFiles?.find((f) => f.id === value);
-      
-      if (project?.name !== 'POC' && file) {
-        const isValid = validateCrawlFile(file.filename, selectedProject, site?.name || '', selectedScope);
-        if (!isValid) {
-          const siteName = site?.name || '';
-          const expectedFormat = `${siteName}_${selectedScope}_Template_YYYYMMDD.tsv`;
-          setIpFileValidationError(`File must follow format: ${expectedFormat}`);
-        } else {
-          setIpFileValidationError('');
-        }
-      } else {
-        setIpFileValidationError('');
-      }
-    }
-  }}>
-    <SelectTrigger className={ipFileValidationError ? 'border-destructive' : ''}>
-      <SelectValue placeholder="Select input file" />
+  <Select value={selectedCrawlFile} onValueChange={setSelectedCrawlFile}>
+    <SelectTrigger>
+      <SelectValue placeholder="Select AE PP source file" />
     </SelectTrigger>
     <SelectContent>
       <div className="px-2 py-2">
@@ -622,25 +674,34 @@ const handleUpload = async (
           className="w-full border rounded px-2 py-1"
         />
       </div>
-      {crawlFiles
-        ?.filter((f) => f.filename.toLowerCase().includes(crawlFileFilter.toLowerCase()))
+      {pdpInputFiles
+        ?.filter((f) => f.name.toLowerCase().includes(crawlFileFilter.toLowerCase()))
         .map((file) => (
-          <SelectItem key={file.id} value={file.id}>
-            {file.filename}
+          <SelectItem key={file.name} value={file.name}>
+            {file.name}
           </SelectItem>
         ))}
     </SelectContent>
   </Select>
-  {ipFileValidationError && (
-    <p className="text-sm text-destructive">{ipFileValidationError}</p>
-  )}
 </div>
 
 <div className="space-y-2">
-  <Label>Crawl Input (IP) File</Label>
+  <Label>AE PP Review File {runMode === 'revalidation' ? <span className="text-destructive"> *</span> : null}</Label>
+  <Button variant="outline" asChild>
+    <label className="cursor-pointer flex gap-2 items-center">
+      <Upload className="h-4 w-4" />
+      Upload/Re-upload Review
+      <input
+        type="file"
+        hidden
+        accept=".xlsx,.xls,.csv,.tsv"
+        onChange={handleReviewReupload}
+      />
+    </label>
+  </Button>
   <Select value={selectedIPFile} onValueChange={setSelectedIPFile}>
       <SelectTrigger>
-        <SelectValue placeholder="Select crawl input file" />
+        <SelectValue placeholder="Select AE PP review file" />
       </SelectTrigger>
       <SelectContent>
         <div className="px-2 py-2">
@@ -663,10 +724,43 @@ const handleUpload = async (
 </div>
 
 <div className="space-y-2">
-  <Label>Master File</Label>
+  <Label>
+    AE PP Template File {isAETemplateRequired ? <span className="text-destructive"> *</span> : null}
+  </Label>
+  <Select value={selectedAETemplateFile} onValueChange={setSelectedAETemplateFile}>
+    <SelectTrigger>
+      <SelectValue placeholder="Select AE PP template file" />
+    </SelectTrigger>
+    <SelectContent>
+      <div className="px-2 py-2">
+        <input
+          value={aeTemplateFilter}
+          onChange={(e) => setAETemplateFilter(e.target.value)}
+          placeholder="Search template files..."
+          className="w-full border rounded px-2 py-1"
+        />
+      </div>
+      {aeTemplateFiles
+        ?.filter((f) => f.name.toLowerCase().includes(aeTemplateFilter.toLowerCase()))
+        .map((file) => (
+          <SelectItem key={file.name} value={file.name}>
+            {file.name}
+          </SelectItem>
+        ))}
+    </SelectContent>
+  </Select>
+  <p className="text-xs text-muted-foreground">
+    {isAETemplateRequired
+      ? "Template is mandatory for this source file."
+      : "Template is optional for this source file."}
+  </p>
+</div>
+
+<div className="space-y-2">
+  <Label>AE PP Reference File <span className="text-destructive"> *</span></Label>
   <Select value={selectedMasterBucketFile} onValueChange={setSelectedMasterBucketFile}>
     <SelectTrigger>
-      <SelectValue placeholder="Select master file" />
+      <SelectValue placeholder="Select AE PP reference file" />
     </SelectTrigger>
     <SelectContent>
       <div className="px-2 py-2">
@@ -690,7 +784,7 @@ const handleUpload = async (
 
           <Button
             onClick={handleRunAutomation}
-            disabled={createRunMutation.isPending || !selectedProject || !selectedSite || !selectedScope || !selectedCrawlFile || !!ipFileValidationError}
+            disabled={createRunMutation.isPending || !canRunAutomation}
             className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
           >
             {createRunMutation.isPending ? (
@@ -845,7 +939,7 @@ const handleUpload = async (
         }
 
         const { data: file } = await supabase.storage
-          .from("run-outputs")
+          .from("pp-run-output")
           .download(data.storage_path);
 
         const url = URL.createObjectURL(file);
@@ -866,7 +960,7 @@ const handleUpload = async (
       disabled={run.status === "cancelled"}
       onClick={async () => {
         if (run.status === "cancelled") return;
-        await backendFetch(`/run/${run.id}/rerun`, { method: 'POST' });
+        await backendFetch(`/pp-run/${run.id}/rerun`, { method: 'POST' });
 
         refetchRuns();
       }}
@@ -1022,4 +1116,4 @@ const handleUpload = async (
   );
 }
 
-export default PLConsoPage;
+export default PPConsoPage;

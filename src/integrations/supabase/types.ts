@@ -212,6 +212,7 @@ export type Database = {
       }
       runs: {
         Row: {
+          ae_filename: string | null
           crawl_filename: string | null
           created_at: string
           end_time: string | null
@@ -227,6 +228,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          ae_filename?: string | null
           crawl_filename?: string | null
           created_at?: string
           end_time?: string | null
@@ -242,6 +244,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          ae_filename?: string | null
           crawl_filename?: string | null
           created_at?: string
           end_time?: string | null

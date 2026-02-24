@@ -25,6 +25,8 @@ import { toast } from 'sonner';
 const BUCKET_MAP: Record<string, string> = {
   'pl-conso': 'run-outputs',
   'pl-input': 'input-creation-output',
+  'pdp-conso': 'pdp-run-output',
+  'pp-conso': 'pp-run-output',
 };
 
 
@@ -197,6 +199,8 @@ const handleDownload = async (
   <option value="all">All Automation</option>
   <option value="pl-input">PL Input</option>
   <option value="pl-conso">PL Conso</option>
+  <option value="pdp-conso">PDP Conso</option>
+  <option value="pp-conso">AE PP Conso</option>
 </select>
 
 
@@ -265,6 +269,14 @@ const handleDownload = async (
   ) : item.automation_slug === 'pl-conso' ? (
     <span className="px-2 py-1 rounded bg-purple-500 text-white text-xs">
       PL Conso
+    </span>
+  ) : item.automation_slug === 'pdp-conso' ? (
+    <span className="px-2 py-1 rounded bg-emerald-500 text-white text-xs">
+      PDP Conso
+    </span>
+  ) : item.automation_slug === 'pp-conso' ? (
+    <span className="px-2 py-1 rounded bg-orange-500 text-white text-xs">
+      AE PP Conso
     </span>
   ) : (
     '-'

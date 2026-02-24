@@ -28,6 +28,7 @@ const mainNavItems = [
   { title: 'PL Conso Automation', url: '/automation/pl-conso', icon: Play },
   { title: 'PL Input Creation Automation', url: '/automation/pl-input', icon: Play },
   { title: 'PDP Conso Automation', url: '/automation/pdp-conso', icon: Play },
+  { title: 'AE PP Conso Automation', url: '/automation/pp-conso', icon: Play },
   { title: 'Downloads', url: '/downloads', icon: Download },
   { title: 'Feedback', url: '/feedback', icon: MessageSquare },
    { title: 'Analytics', url: '/analytics', icon: BarChart3 },
