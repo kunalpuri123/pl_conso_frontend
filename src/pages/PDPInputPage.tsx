@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -31,25 +32,28 @@ import { format, formatDistanceToNow } from 'date-fns';
 import type { Project, Site, Run, InputFile, RunLog } from '@/lib/supabase-types';
 import { backendFetch } from '@/lib/backendApi';
 
-const scopes = ['PL'];
+const scopes = ['PDP'];
+const PDP_INPUT_CREATION_BUCKETS = {
+  biz: 'pdp-input-creation-bussiness-file',
+  crawl: 'pdp-input-creation-crawl-team-file',
+  output: 'pdp-input-creation-output',
+} as const;
 
-export function PLInputPage() {
+export function PDPInputPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [uploadingType, setUploadingType] = useState<'CRAWL' | 'MASTER' | null>(null);
+  const [uploadingType, setUploadingType] = useState<'CRAWL' | null>(null);
   const [selectedIPFile, setSelectedIPFile] = useState<string>('');
-  const [selectedMasterBucketFile, setSelectedMasterBucketFile] = useState<string>('');
   const [projectFilter, setProjectFilter] = useState<string>('');
   const [siteFilter, setSiteFilter] = useState<string>('');
   const [crawlFileFilter, setCrawlFileFilter] = useState<string>('');
   const [crawlInputFilter, setCrawlInputFilter] = useState<string>('');
-  const [masterFileFilter, setMasterFileFilter] = useState<string>('');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [consoleLogs, setConsoleLogs] = useState<any[]>([]);
-  
+  const [uploadingIPFile, setUploadingIPFile] = useState(false);
 
   const BUSINESS_GROUPS = {
   COTY: "COTY",
@@ -107,9 +111,8 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
   );
   const [selectedSite, setSelectedSite] = useState<string>('');
   const [selectedScope, setSelectedScope] = useState<string>('');
+  const [goLiveDate, setGoLiveDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [selectedCrawlFile, setSelectedCrawlFile] = useState<string>('');
-  const [selectedMasterFile, setSelectedMasterFile] = useState<string>('');
-  
   // Current run being monitored
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
 
@@ -140,10 +143,10 @@ const PROJECT_GROUP_MAP: Record<string, string[]> = {
 
   // Fetch input files
 const { data: bizFiles } = useQuery({
-  queryKey: ['storage-biz-files'],
+  queryKey: ['storage-pdp-input-creation-biz-files'],
   queryFn: async () => {
     const { data, error } = await supabase.storage
-      .from('input-creation-bussiness-file')
+      .from(PDP_INPUT_CREATION_BUCKETS.biz)
       .list('');
 
     if (error) {
@@ -158,31 +161,16 @@ const { data: bizFiles } = useQuery({
 
 // Fetch crawl-input (IP) files from bucket
 const { data: crawlInputFiles } = useQuery({
-  queryKey: ['storage-crawl-input-files'],
+  queryKey: ['storage-pdp-input-creation-crawl-input-files'],
   queryFn: async () => {
     const { data, error } = await supabase.storage
-      .from('input-creation-crawl-team-file')
+      .from(PDP_INPUT_CREATION_BUCKETS.crawl)
       .list('', { limit: 100 });
 
     if (error) throw error;
 
     console.log("IP files:", data);
 
-    return data;
-  },
-});
-
-
-// Fetch masters files from bucket
-const { data: masterBucketFiles } = useQuery({
-  queryKey: ['storage-master-files'],
-  queryFn: async () => {
-    const { data, error } = await supabase.storage.from('input-creation-master').list('');
-    if (error) {
-      console.error('masterBucketFiles error:', error);
-      throw error;
-    }
-    console.log('masterBucketFiles loaded:', data);
     return data;
   },
 });
@@ -282,9 +270,9 @@ const { data: masterBucketFiles } = useQuery({
       const crawlFile = bizFiles?.find((f) => f.name === selectedCrawlFile);
 
 
-if (!crawlFile) throw new Error("Please select crawl output file");
-if (!selectedIPFile) throw new Error("Please select crawl input file");
-if (!selectedMasterBucketFile) throw new Error("Please select master file");
+if (!crawlFile) throw new Error("Please select PDP crawl output file");
+if (!selectedIPFile) throw new Error("Please select PDP crawl input file");
+if (!goLiveDate) throw new Error("Please select Go-Live date");
 
       const { data, error } = await supabase
         .from('runs')
@@ -295,8 +283,9 @@ if (!selectedMasterBucketFile) throw new Error("Please select master file");
           scope: selectedScope,
           op_filename: selectedCrawlFile,    // uploaded OP
 ip_filename: selectedIPFile,          // from crawl-input bucket
-master_filename: selectedMasterBucketFile, // from masters bucket
-automation_slug: 'pl-input',
+master_filename: null,
+go_live_date: goLiveDate,
+automation_slug: 'pdp-input',
 
           status: 'pending',
         })
@@ -329,7 +318,11 @@ automation_slug: 'pl-input',
     }
     
     if (!selectedIPFile) {
-      toast.error('Please select crawl input file');
+      toast.error('Please select PDP crawl input file');
+      return;
+    }
+    if (!goLiveDate) {
+      toast.error('Please select Go-Live date');
       return;
     }
     
@@ -375,17 +368,19 @@ automation_slug: 'pl-input',
 
 const handleUpload = async (
   e: React.ChangeEvent<HTMLInputElement>,
-  type: "BIZ" | "CRAWL" | "MASTER"
+  type: "BIZ" | "CRAWL"
 ) => {
   try {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (type === "CRAWL") setUploadingIPFile(true);
+    if (type === "BIZ") setUploadingType("CRAWL");
+
     let bucket = "";
 
-    if (type === "BIZ") bucket = "input-creation-bussiness-file";
-    if (type === "CRAWL") bucket = "input-creation-crawl-team-file";
-    if (type === "MASTER") bucket = "input-creation-master";
+    if (type === "BIZ") bucket = PDP_INPUT_CREATION_BUCKETS.biz;
+    if (type === "CRAWL") bucket = PDP_INPUT_CREATION_BUCKETS.crawl;
 
     const filePath = `${Date.now()}_${file.name}`;
 
@@ -396,13 +391,21 @@ const handleUpload = async (
     if (error) throw error;
 
     toast.success("Uploaded successfully");
-    queryClient.invalidateQueries({
-  queryKey: ['storage-crawl-input-files'],
-});
+    queryClient.invalidateQueries({ queryKey: ['storage-pdp-input-creation-biz-files'] });
+    queryClient.invalidateQueries({ queryKey: ['storage-pdp-input-creation-crawl-input-files'] });
 
+    // Auto-select the newly uploaded file
+    if (type === "CRAWL") {
+      setSelectedIPFile(filePath);
+    } else if (type === "BIZ") {
+      setSelectedCrawlFile(filePath);
+    }
 
   } catch (err: any) {
     toast.error(err.message);
+  } finally {
+    if (type === "CRAWL") setUploadingIPFile(false);
+    if (type === "BIZ") setUploadingType(null);
   }
 };
 
@@ -428,7 +431,6 @@ const handleUpload = async (
               setSiteFilter('');
               setCrawlFileFilter('');
               setCrawlInputFilter('');
-              setMasterFileFilter('');
             }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select project" />
@@ -465,7 +467,6 @@ const handleUpload = async (
                 setSiteFilter('');
                 setCrawlFileFilter('');
                 setCrawlInputFilter('');
-                setMasterFileFilter('');
               }}
               disabled={!selectedProject}
             >
@@ -500,7 +501,6 @@ const handleUpload = async (
               
               setCrawlFileFilter('');
               setCrawlInputFilter('');
-              setMasterFileFilter('');
             }}>
               <SelectTrigger>
                 <SelectValue placeholder="Select scope" />
@@ -515,8 +515,16 @@ const handleUpload = async (
             </Select>
           </div>
           <div className="space-y-2">
+            <Label>Go-Live Date <span className="text-destructive">*</span></Label>
+            <Input
+              type="date"
+              value={goLiveDate}
+              onChange={(e) => setGoLiveDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
   <Label>
-    Crawl Input File
+    PDP Crawl Input File
     {(() => {
       const project = projects?.find((p) => p.id === selectedProject);
       return project?.name !== 'POC' && <span className="text-destructive"> *</span>;
@@ -526,7 +534,7 @@ const handleUpload = async (
   <Button variant="outline" asChild>
     <label className="cursor-pointer flex gap-2 items-center">
       <Upload className="h-4 w-4" />
-      Upload Crawl File
+      Upload PDP Crawl File
       <input
         type="file"
         hidden
@@ -538,7 +546,7 @@ const handleUpload = async (
 
   <Select value={selectedCrawlFile} onValueChange={setSelectedCrawlFile}>
     <SelectTrigger>
-      <SelectValue placeholder="Select input file" />
+      <SelectValue placeholder="Select PDP input file" />
     </SelectTrigger>
     <SelectContent>
       <div className="px-2 py-2">
@@ -564,48 +572,39 @@ const handleUpload = async (
 </div>
 
 <div className="space-y-2">
-  <Label>Crawl Input (IP) File</Label>
+  <Label>PDP Crawl Input (IP) File <span className="text-destructive">*</span></Label>
+  <Button variant="outline" asChild disabled={uploadingIPFile}>
+    <label className="cursor-pointer flex gap-2 items-center">
+      {uploadingIPFile ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Upload className="h-4 w-4" />
+      )}
+      Upload PDP Crawl Input File
+      <input
+        type="file"
+        hidden
+        accept=".csv,.tsv,.xlsx"
+        onChange={(e) => handleUpload(e, 'CRAWL')}
+        disabled={uploadingIPFile}
+      />
+    </label>
+  </Button>
   <Select value={selectedIPFile} onValueChange={setSelectedIPFile}>
-      <SelectTrigger>
-        <SelectValue placeholder="Select crawl input file" />
-      </SelectTrigger>
-      <SelectContent>
-        <div className="px-2 py-2">
-          <input
-            value={crawlInputFilter}
-            onChange={(e) => setCrawlInputFilter(e.target.value)}
-            placeholder="Search storage files..."
-            className="w-full border rounded px-2 py-1"
-          />
-        </div>
-        {crawlInputFiles
-          ?.filter((f) => f.name.toLowerCase().includes(crawlInputFilter.toLowerCase()))
-          .map((file) => (
-            <SelectItem key={file.name} value={file.name}>
-              {file.name}
-            </SelectItem>
-          ))}
-      </SelectContent>
-    </Select>
-</div>
-
-<div className="space-y-2">
-  <Label>Master File</Label>
-  <Select value={selectedMasterBucketFile} onValueChange={setSelectedMasterBucketFile}>
     <SelectTrigger>
-      <SelectValue placeholder="Select master file" />
+      <SelectValue placeholder="Select PDP crawl input file" />
     </SelectTrigger>
     <SelectContent>
       <div className="px-2 py-2">
         <input
-          value={masterFileFilter}
-          onChange={(e) => setMasterFileFilter(e.target.value)}
-          placeholder="Search master files..."
+          value={crawlInputFilter}
+          onChange={(e) => setCrawlInputFilter(e.target.value)}
+          placeholder="Search storage files..."
           className="w-full border rounded px-2 py-1"
         />
       </div>
-      {masterBucketFiles
-        ?.filter((f) => f.name.toLowerCase().includes(masterFileFilter.toLowerCase()))
+      {crawlInputFiles
+        ?.filter((f) => f.name.toLowerCase().includes(crawlInputFilter.toLowerCase()))
         .map((file) => (
           <SelectItem key={file.name} value={file.name}>
             {file.name}
@@ -617,7 +616,14 @@ const handleUpload = async (
 
           <Button
             onClick={handleRunAutomation}
-            disabled={createRunMutation.isPending || !selectedProject || !selectedSite || !selectedScope || !selectedCrawlFile }
+            disabled={
+              createRunMutation.isPending || 
+              !selectedProject || 
+              !selectedSite || 
+              !selectedScope || 
+              !selectedCrawlFile ||
+              !selectedIPFile
+            }
             className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
           >
             {createRunMutation.isPending ? (
@@ -703,13 +709,9 @@ const handleUpload = async (
                         <TableCell>
   {(() => {
     const map: Record<string, { label: string; className: string }> = {
-      "pl-input": {
-        label: "PL Input",
-        className: "bg-blue-500 text-white"
-      },
       "pdp-input": {
         label: "PDP Input",
-        className: "bg-cyan-600 text-white"
+        className: "bg-blue-500 text-white"
       },
       "pl-conso": {
         label: "PL Conso",
@@ -767,7 +769,7 @@ if (!zipFile) {
 }
 
 const { data: file, error } = await supabase.storage
-  .from("input-creation-output")   // your new bucket
+  .from(PDP_INPUT_CREATION_BUCKETS.output)
   .download(zipFile.storage_path);
 
 if (error || !file) {
@@ -902,13 +904,9 @@ URL.revokeObjectURL(url);
                         <TableCell>
   {(() => {
     const map: Record<string, { label: string; className: string }> = {
-      "pl-input": {
-        label: "PL Input",
-        className: "bg-blue-500 text-white"
-      },
       "pdp-input": {
         label: "PDP Input",
-        className: "bg-cyan-600 text-white"
+        className: "bg-blue-500 text-white"
       },
       "pl-conso": {
         label: "PL Conso",
@@ -948,4 +946,4 @@ URL.revokeObjectURL(url);
   );
 }
 
-export default PLInputPage;
+export default PDPInputPage;

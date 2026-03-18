@@ -63,6 +63,7 @@ export interface Run {
   ae_filename?: string | null;
   crawl_filename: string | null;
   master_filename: string | null;
+  go_live_date?: string | null;
   status: RunStatus;
   progress_percent: number;
   start_time: string | null;

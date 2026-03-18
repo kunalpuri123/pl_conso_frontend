@@ -675,6 +675,10 @@ const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         label: "PL Input",
         className: "bg-blue-500 text-white"
       },
+      "pdp-input": {
+        label: "PDP Input",
+        className: "bg-cyan-600 text-white"
+      },
       "pl-conso": {
         label: "PL Conso",
         className: "bg-purple-500 text-white"
@@ -867,6 +871,10 @@ const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       "pl-input": {
         label: "PL Input",
         className: "bg-blue-500 text-white"
+      },
+      "pdp-input": {
+        label: "PDP Input",
+        className: "bg-cyan-600 text-white"
       },
       "pl-conso": {
         label: "PL Conso",

@@ -21,6 +21,7 @@ import NotFound from "./pages/NotFound";
 import ProfilePage from "./pages/ProfilePage";
 import FeedbackPage from "./pages/FeedbackPage";
 import PLInputPage from "./pages/PLInputPage";
+import PDPInputPage from "./pages/PDPInputPage";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ const App = () => (
               <Route index element={<HomePage />} />
               <Route path="automation/pl-conso" element={<PLConsoPage />} />
               <Route path="automation/pl-input" element={<PLInputPage />} />
+              <Route path="automation/pdp-input" element={<PDPInputPage />} />
               <Route path="automation/pdp-conso" element={<PDPConsoPage />} />
               <Route path="automation/pp-conso" element={<PPConsoPage />} />
               <Route path="analytics" element={<AdminAnalyticsPage />} />
